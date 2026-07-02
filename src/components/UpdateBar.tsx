@@ -33,7 +33,8 @@ export function UpdateBar() {
         )}
         {phase === 'ready' && <div className="absolute inset-y-0 left-0 bg-accent/10 w-full" />}
 
-        <div className="relative flex items-center justify-between px-5 py-2 gap-4">
+        {/* 92px left inset clears macOS traffic lights — the bar mounts above the titlebar, shifting the lights onto this row */}
+        <div className="relative flex items-center justify-between pr-5 py-2 gap-4" style={{ paddingLeft: '92px' }}>
           <div className="flex items-center gap-2.5 min-w-0">
             {phase === 'available' && (
               <>

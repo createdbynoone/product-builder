@@ -337,6 +337,54 @@ const NB2_RESOLUTIONS = ['1k', '2k', '4k'] as const
 // Paths generated this session — the only ones reveal-render will act on
 const sessionRenders = new Set<string>()
 
+// ─── Higgsfield CLI fallback (same pattern as BMP) ────────────────────────────
+
+const HF_RATIOS = ['9:16', '4:5', '1:1', '16:9', '1:2', '2:1'] as const
+
+async function buildViaHiggsfield(
+  prompt: string, resources: string[], size: string, res: string,
+  outputDir: string, timestamp: number,
+  sendProgress: (l: string) => void,
+): Promise<{ success: boolean; outputPath: string; error?: string }> {
+  // Higgsfield CLI doesn't support 3:4 or 4K — map to nearest
+  const hfRatio = HF_RATIOS.includes(size as typeof HF_RATIOS[number]) ? size : '4:5'
+  const hfRes = res === '1K' ? '1k' : '2k'
+  sendProgress(`Retrying via Higgsfield nano_banana_2 (${hfRatio} · ${hfRes.toUpperCase()})...`)
+
+  const args = [
+    'generate', 'create', 'nano_banana_2',
+    '--prompt', prompt,
+    '--resolution', hfRes,
+    '--aspect_ratio', hfRatio,
+    '--wait',
+  ]
+  for (const p of resources) args.push('--image', p)
+
+  try {
+    const { stdout, stderr } = await execFileAsync('higgsfield', args, { timeout: 300_000, env: shellEnv() })
+    const combined = (stdout + '\n' + stderr).trim()
+    if (combined) sendProgress(combined)
+
+    const cliError = combined.match(/\b(error|failed|failure|rejected|content.?policy|moderat|violat|unsafe|prohibited)\b/i)
+    if (cliError) return { success: false, outputPath: '', error: `Higgsfield: ${combined.slice(0, 200)}` }
+
+    const urlMatch = combined.match(/https:\/\/\S+\.(png|jpg|jpeg|webp)/i)
+    if (!urlMatch) return { success: false, outputPath: '', error: 'Higgsfield: no image URL in CLI output' }
+
+    const ext = urlMatch[0].split('.').pop()?.split('?')[0] ?? 'jpg'
+    const outputName = `pb_${timestamp}.${ext}`
+    const outputPath = join(outputDir, outputName)
+    sendProgress('Downloading render...')
+    await downloadFile(urlMatch[0], outputPath)
+    sessionRenders.add(outputPath)
+    sendProgress(`Saved: ${outputName} (via Higgsfield)`)
+    return { success: true, outputPath }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { success: false, outputPath: '', error: `Higgsfield: ${msg}` }
+  }
+}
+
 ipcMain.handle('fire-build', async (event, { prompt, resources, aspectRatio, resolution }: {
   prompt: string; resources: string[]; aspectRatio: string; resolution: string
 }) => {
@@ -354,13 +402,23 @@ ipcMain.handle('fire-build', async (event, { prompt, resources, aspectRatio, res
   const safeSize = NB2_RATIOS.includes(aspectRatio as typeof NB2_RATIOS[number]) ? aspectRatio : '1:1'
   const safeRes = NB2_RESOLUTIONS.includes(resolution as typeof NB2_RESOLUTIONS[number]) ? resolution.toUpperCase() : '2K'
 
+  // Diagnose the POYO failure, then automatically retry with the same config via Higgsfield
+  const fallbackToHiggsfield = async (poyoError: string) => {
+    sendProgress(`POYO failed: ${poyoError}`)
+    const r = await buildViaHiggsfield(prompt, resources, safeSize, safeRes, outputDir, timestamp, sendProgress)
+    if (!r.success) {
+      const msg = `POYO: ${poyoError} · ${r.error}`
+      sendProgress(`Error: ${msg}`)
+      return { success: false, outputPath: '', error: msg }
+    }
+    return r
+  }
+
   let imageUrls: string[] = []
   try {
     imageUrls = await uploadResourcesToPOYO(resources, apiKey, sendProgress)
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    sendProgress(msg)
-    return { success: false, outputPath: '', error: msg }
+    return fallbackToHiggsfield(err instanceof Error ? err.message : String(err))
   }
 
   // Edit model when resources provided (adheres to references)
@@ -377,9 +435,7 @@ ipcMain.handle('fire-build', async (event, { prompt, resources, aspectRatio, res
   })
   const submitData = await submitRes.json() as { code?: number; data?: { task_id: string }; error?: { message: string } }
   if (!submitRes.ok || !submitData.data?.task_id) {
-    const msg = submitData.error?.message ?? `HTTP ${submitRes.status}`
-    sendProgress(`Submit error: ${msg}`)
-    return { success: false, outputPath: '', error: msg }
+    return fallbackToHiggsfield(`submit error: ${submitData.error?.message ?? `HTTP ${submitRes.status}`}`)
   }
 
   sendProgress(`Building... (${submitData.data.task_id})`)
@@ -387,7 +443,7 @@ ipcMain.handle('fire-build', async (event, { prompt, resources, aspectRatio, res
   try {
     const files = await pollPOYOTask(submitData.data.task_id, apiKey, sendProgress)
     const imgFile = files.find((f) => f.file_type === 'image' || f.file_url.match(/\.(jpg|jpeg|png|webp)/i))
-    if (!imgFile) { sendProgress('No image in response'); return { success: false, outputPath: '', error: 'No image file' } }
+    if (!imgFile) return fallbackToHiggsfield('no image in response')
     const ext = imgFile.file_url.split('.').pop()?.split('?')[0] ?? 'jpg'
     const outputName = `pb_${timestamp}.${ext}`
     const outputPath = join(outputDir, outputName)
@@ -397,9 +453,7 @@ ipcMain.handle('fire-build', async (event, { prompt, resources, aspectRatio, res
     sendProgress(`Saved: ${outputName}`)
     return { success: true, outputPath }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    sendProgress(`Error: ${msg}`)
-    return { success: false, outputPath: '', error: msg }
+    return fallbackToHiggsfield(err instanceof Error ? err.message : String(err))
   }
 })
 

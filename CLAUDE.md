@@ -4,7 +4,7 @@ Electron app para **creación de producto** (no marketing): combina recursos eti
 
 **Dev:** `npm run dev` (puerto 5275)
 **Typecheck:** `npm run typecheck`
-**Versión actual:** 1.0.1
+**Versión actual:** 1.1.0
 **GitHub:** `createdbynoone/product-builder`
 
 ## Stack
@@ -30,6 +30,7 @@ Electron app para **creación de producto** (no marketing): combina recursos eti
 3. Poll cada 5s (`pollPOYOTask`, 8s inicial, timeout 10 min), progreso via canal IPC `pb-progress`
 4. Descarga a outputPath (default Desktop, configurable desde el titlebar) como `pb_<timestamp>.<ext>`
 5. El render se registra en `sessionRenders` (Set) — `reveal-render` solo actúa sobre paths de esa sesión
+6. **Fallback Higgsfield (v1.1.0):** si POYO falla en cualquier punto (upload, submit, poll o sin imagen), `fallbackToHiggsfield` muestra el diagnóstico (`POYO failed: <error_message>`) y reintenta automáticamente via CLI `higgsfield generate create nano_banana_2` con la misma config y los recursos locales como `--image`. Mapeos (el CLI no soporta todo): `3:4 → 4:5`, `4K → 2k`. El render del fallback se guarda igual (`pb_<timestamp>.<ext>`, sessionRenders)
 
 ## Claude polish (opcional)
 
