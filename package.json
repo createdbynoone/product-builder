@@ -42,6 +42,7 @@
       "repo": "product-builder",
       "releaseType": "release"
     },
+    "artifactName": "Product.Builder-${version}-${arch}.${ext}",
     "mac": {
       "category": "public.app-category.graphics-design",
       "icon": "build/icon.icns",
