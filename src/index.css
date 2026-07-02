@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #0c0c0c;
+  color: #F0EBE0;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #0c0c0c; }
+::-webkit-scrollbar-thumb { background: #242424; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #323232; }
+
+/* Draggable titlebar region */
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+.titlebar-nodrag {
+  -webkit-app-region: no-drag;
+}
+
+/* Textarea reset */
+textarea {
+  resize: none;
+  outline: none;
+  background: transparent;
+}
+
+.selectable {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* ─── Entry animations (same pattern as Canvas / Sorter / BMP) ──────────────── */
+@keyframes menu-in {
+  from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-menu-in {
+  animation: menu-in 0.13s cubic-bezier(0.2, 0, 0.2, 1);
+  transform-origin: top left;
+}
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateX(10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-panel-in {
+  animation: panel-in 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-fade-in { animation: fade-in 0.2s ease-out; }
+
+/* Pulse while building */
+@keyframes build-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.animate-build-pulse { animation: build-pulse 1.6s ease-in-out infinite; }
+
+/* ─── Tactile feedback — buttons compress on press ─────────────────────────── */
+button {
+  transition: transform 0.1s ease;
+}
+button:active {
+  transform: scale(0.96);
+}
