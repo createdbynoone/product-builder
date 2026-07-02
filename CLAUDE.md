@@ -4,7 +4,7 @@ Electron app para **creación de producto** (no marketing): combina recursos eti
 
 **Dev:** `npm run dev` (puerto 5275)
 **Typecheck:** `npm run typecheck`
-**Versión actual:** 1.0.0
+**Versión actual:** 1.0.1
 **GitHub:** `createdbynoone/product-builder`
 
 ## Stack
