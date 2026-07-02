@@ -1,6 +1,6 @@
 {
   "name": "product-builder",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Product Builder — prototipado de producto con Nano Banana 2 y preview en tiempo real",
   "main": "out/main/main.js",
   "type": "module",
@@ -47,23 +47,57 @@
       "category": "public.app-category.graphics-design",
       "icon": "build/icon.icns",
       "target": [
-        { "target": "dmg", "arch": ["arm64", "x64"] },
-        { "target": "zip", "arch": ["arm64", "x64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ]
     },
     "dmg": {
       "background": "build/background.png",
-      "window": { "width": 540, "height": 380 },
+      "window": {
+        "width": 540,
+        "height": 380
+      },
       "contents": [
-        { "x": 130, "y": 216, "type": "file" },
-        { "x": 410, "y": 216, "type": "link", "path": "/Applications" }
+        {
+          "x": 130,
+          "y": 216,
+          "type": "file"
+        },
+        {
+          "x": 410,
+          "y": 216,
+          "type": "link",
+          "path": "/Applications"
+        }
       ],
       "iconSize": 80
     },
-    "directories": { "output": "release" },
-    "files": ["out/**/*"],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*"
+    ],
     "extraResources": [
-      { "from": "build/icons", "to": "icons", "filter": ["**/*.png"] }
+      {
+        "from": "build/icons",
+        "to": "icons",
+        "filter": [
+          "**/*.png"
+        ]
+      }
     ]
   }
 }
