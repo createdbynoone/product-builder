@@ -2,12 +2,29 @@ import { app, BrowserWindow, ipcMain, shell, nativeImage, protocol, net, Menu, d
 import { join } from 'path'
 import { readFileSync, writeFileSync, createWriteStream } from 'fs'
 import { homedir } from 'os'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import https from 'https'
 import Anthropic from '@anthropic-ai/sdk'
+import electronUpdater from 'electron-updater'
+const { autoUpdater } = electronUpdater
+
+const execFileAsync = promisify(execFile)
+
+const SHELL_PATH = [
+  '/usr/local/bin', '/opt/homebrew/bin', '/opt/homebrew/sbin',
+  '/usr/bin', '/bin', process.env.PATH ?? '',
+].join(':')
+
+function shellEnv(): NodeJS.ProcessEnv { return { ...process.env, PATH: SHELL_PATH } }
 
 // ─── Preferences ──────────────────────────────────────────────────────────────
 
+const ICON_STYLES = ['Default', 'Dark', 'ClearLight', 'ClearDark', 'TintedLight', 'TintedDark'] as const
+type IconStyle = typeof ICON_STYLES[number]
+
 interface Prefs {
+  iconStyle: IconStyle
   outputPath: string
 }
 
@@ -22,9 +39,9 @@ function defaultOutputPath(): string {
 function loadPrefs(): Prefs {
   try {
     const raw = readFileSync(prefsPath(), 'utf-8')
-    return { outputPath: defaultOutputPath(), ...JSON.parse(raw) }
+    return { iconStyle: 'Default', outputPath: defaultOutputPath(), ...JSON.parse(raw) }
   } catch {
-    return { outputPath: defaultOutputPath() }
+    return { iconStyle: 'Default', outputPath: defaultOutputPath() }
   }
 }
 
@@ -32,12 +49,41 @@ function savePrefs(prefs: Prefs) {
   writeFileSync(prefsPath(), JSON.stringify(prefs, null, 2), 'utf-8')
 }
 
+function getIconPath(styleName: string): string {
+  const filename = `Icon-macOS-${styleName}-1024@1x.png`
+  if (app.isPackaged) return join(process.resourcesPath, 'icons', filename)
+  return join(__dirname, '../../build/icons', filename)
+}
+
+function applyDockIcon(styleName: string) {
+  if (process.platform !== 'darwin') return
+  try {
+    const icon = nativeImage.createFromPath(getIconPath(styleName))
+    if (!icon.isEmpty()) app.dock.setIcon(icon)
+  } catch {}
+}
+
 function buildAppMenu() {
+  const prefs = loadPrefs()
+
+  const iconSubmenu: Electron.MenuItemConstructorOptions[] = ICON_STYLES.map(style => ({
+    label: style,
+    type: 'radio' as const,
+    checked: prefs.iconStyle === style,
+    click: () => {
+      savePrefs({ ...loadPrefs(), iconStyle: style })
+      applyDockIcon(style)
+      buildAppMenu()
+    },
+  }))
+
   const template: Electron.MenuItemConstructorOptions[] = [
     {
       label: app.getName(),
       submenu: [
         { role: 'about' },
+        { type: 'separator' },
+        { label: 'App Icon', submenu: iconSubmenu },
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
@@ -380,6 +426,86 @@ ipcMain.handle('open-folder-dialog', async () => {
   return result.filePaths[0]
 })
 
+// ─── Auto-update (silent DMG swap) ─────────────────────────────────────────────
+
+function downloadDmgWithProgress(url: string, destPath: string, onProgress: (pct: number) => void): Promise<void> {
+  if (!url.startsWith('https://')) return Promise.reject(new Error('Only HTTPS downloads are allowed'))
+  return new Promise((resolve, reject) => {
+    const attempt = (attemptUrl: string) => {
+      if (!attemptUrl.startsWith('https://')) { reject(new Error('Redirect to non-HTTPS blocked')); return }
+      const parsed = new URL(attemptUrl)
+      https.get({ hostname: parsed.hostname, path: parsed.pathname + parsed.search }, (res) => {
+        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          attempt(res.headers.location); return
+        }
+        const total = parseInt(res.headers['content-length'] ?? '0', 10)
+        let received = 0
+        const file = createWriteStream(destPath)
+        res.on('data', (chunk: Buffer) => {
+          received += chunk.length
+          if (total > 0) onProgress(Math.round((received / total) * 100))
+        })
+        res.pipe(file)
+        file.on('finish', () => file.close(() => resolve()))
+        file.on('error', reject)
+      }).on('error', reject)
+    }
+    attempt(url)
+  })
+}
+
+async function installFromDmg(dmgPath: string): Promise<void> {
+  const { stdout } = await execFileAsync('hdiutil', ['attach', dmgPath, '-nobrowse', '-plist'], { env: shellEnv() })
+  const mountMatch = stdout.match(/<key>mount-point<\/key>\s*<string>([^<]+)<\/string>/)
+  if (!mountMatch) throw new Error('DMG mount point not found')
+  const mountPoint = mountMatch[1].trim()
+  try {
+    await execFileAsync('ditto', [`${mountPoint}/Product Builder.app`, '/Applications/Product Builder.app'], { env: shellEnv() })
+    // Note: the .app bundle keeps the real productName with a space — only
+    // release *filenames* get sanitized (spaces → dots) by electron-builder
+  } finally {
+    await execFileAsync('hdiutil', ['detach', mountPoint, '-quiet', '-force'], { env: shellEnv() }).catch(() => {})
+  }
+}
+
+function setupAutoUpdater(win: BrowserWindow) {
+  // Only run in packaged app — skip in dev
+  if (!app.isPackaged) return
+
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = false
+
+  const notify = (payload: object) => win.webContents.send('update-status', payload)
+
+  autoUpdater.on('update-available', (info) => {
+    notify({ phase: 'available', version: info.version })
+
+    const arch = process.arch === 'arm64' ? '-arm64' : ''
+    const filename = `Product.Builder-${info.version}${arch}.dmg`
+    const dmgUrl = `https://github.com/createdbynoone/product-builder/releases/download/v${info.version}/${filename}`
+    const tmpPath = join(app.getPath('temp'), filename)
+
+    downloadDmgWithProgress(dmgUrl, tmpPath, (percent) => {
+      notify({ phase: 'downloading', percent, version: info.version })
+    })
+      .then(async () => {
+        notify({ phase: 'installing', version: info.version })
+        await installFromDmg(tmpPath)
+        notify({ phase: 'ready', version: info.version })
+        setTimeout(() => { app.relaunch(); app.quit() }, 1500)
+      })
+      .catch(async (err: Error) => {
+        notify({ phase: 'error', error: `Auto-install fallido, abriendo DMG: ${err.message}` })
+        const desktopPath = join(homedir(), 'Desktop', filename)
+        try { await downloadFile(dmgUrl, desktopPath); await shell.openPath(desktopPath) } catch {}
+      })
+  })
+
+  autoUpdater.on('error', (err) => notify({ phase: 'error', error: err.message }))
+
+  win.webContents.once('did-finish-load', () => autoUpdater.checkForUpdates())
+}
+
 // ─── Window ───────────────────────────────────────────────────────────────────
 
 function createWindow(): BrowserWindow {
@@ -426,7 +552,9 @@ app.whenReady().then(() => {
     return net.fetch(`file://${filePath}`)
   })
   buildAppMenu()
-  createWindow()
+  const win = createWindow()
+  setupAutoUpdater(win)
+  applyDockIcon(loadPrefs().iconStyle)
 })
 
 app.on('window-all-closed', () => {

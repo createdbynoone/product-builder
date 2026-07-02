@@ -3,6 +3,7 @@ import { ResourcePanel } from './components/ResourcePanel'
 import { PromptPanel } from './components/PromptPanel'
 import { PreviewPanel, Render } from './components/PreviewPanel'
 import { BuildBar, Ratio, Resolution } from './components/BuildBar'
+import { UpdateBar } from './components/UpdateBar'
 
 export default function App() {
   const [resources, setResources] = useState<string[]>([])
@@ -106,6 +107,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full">
+      <UpdateBar />
       {/* Titlebar — h-11 + 92px left inset clears macOS traffic lights */}
       <div className="titlebar-drag flex items-center justify-between h-11 border-b border-border flex-shrink-0 pr-4" style={{ paddingLeft: '92px' }}>
         <div className="flex items-baseline gap-2 translate-y-[1px]">

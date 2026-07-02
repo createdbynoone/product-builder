@@ -4,7 +4,8 @@ Electron app para **creación de producto** (no marketing): combina recursos eti
 
 **Dev:** `npm run dev` (puerto 5275)
 **Typecheck:** `npm run typecheck`
-**Versión actual:** 1.0.0 (sin release aún — sin repo GitHub, sin auto-update, sin íconos)
+**Versión actual:** 1.0.0
+**GitHub:** `createdbynoone/product-builder`
 
 ## Stack
 
@@ -53,7 +54,24 @@ GET  /api/generate/status/{id}   → { data: { status, progress, files } }
 ```
 Finish: `finished | completed | succeeded` · Error: `failed | error`
 
+## Íconos (Dock, 6 variantes)
+
+`build/icons/Icon-macOS-{Default,Dark,ClearLight,ClearDark,TintedLight,TintedDark}-1024@1x.png` — pack compartido con BMP (mismo artwork). Selector en menú app → "App Icon" (radio), persiste en `pb-prefs.json` como `iconStyle`, aplicado via `applyDockIcon()`. `build/icon.icns` es el ícono del bundle/DMG; `build/background.png` el fondo del instalador.
+
+## Auto-update (silencioso, mismo patrón que BMP/Sorter/Canvas)
+
+`electron-updater` revisa `latest-mac.yml` del último release de GitHub; si hay versión nueva, descarga el DMG manualmente (con progreso), monta con `hdiutil`, reemplaza `/Applications/Product Builder.app` con `ditto`, y relanza. Fallback: si el swap falla, descarga el DMG al Desktop y lo abre para instalación manual. UI: `UpdateBar` arriba del titlebar, estados available/downloading/installing/ready/error.
+
+**Nota de nombres:** el bundle se llama `Product Builder.app` (con espacio), pero electron-builder sanitiza espacios → puntos en los *nombres de archivo* de release (`Product.Builder-1.0.0-arm64.dmg`). El código de auto-update usa el nombre sanitizado para construir la URL de descarga.
+
+## Release workflow
+
+1. Bump `version` en `package.json`
+2. Commit + push a `main`
+3. `git tag vX.Y.Z && git push origin vX.Y.Z` (el tag debe existir en el remoto antes de publicar — electron-builder 26 lo exige)
+4. `GH_TOKEN=$(gh auth token) bash scripts/publish.sh` — build arm64 y x64 **secuencial** (evita mismatch de sha512 por firma paralela)
+5. Verificar `latest-mac.yml` del release: version correcta, sha512 coincide con el zip local, tamaños coinciden con los assets subidos
+
 ## Pendiente
 
-- Íconos de app (build/icon.icns + variantes Dock)
-- Repo GitHub + electron-updater + publish.sh cuando haya release (seguir workflow de BMP: tag primero, `latest-mac.yml` verificado)
+- Ninguno crítico — listo para primer release

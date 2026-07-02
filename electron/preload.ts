@@ -24,4 +24,9 @@ contextBridge.exposeInMainWorld('pb', {
   getOutputPath: () => ipcRenderer.invoke('get-output-path'),
   setOutputPath: (path: string) => ipcRenderer.invoke('set-output-path', path),
   openFolderDialog: () => ipcRenderer.invoke('open-folder-dialog') as Promise<string | null>,
+
+  onUpdateStatus: (cb: (s: unknown) => void) => {
+    ipcRenderer.on('update-status', (_e, s) => cb(s))
+    return () => ipcRenderer.removeAllListeners('update-status')
+  },
 })

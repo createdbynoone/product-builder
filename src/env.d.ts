@@ -9,5 +9,6 @@ interface Window {
     getOutputPath: () => Promise<string>
     setOutputPath: (path: string) => Promise<void>
     openFolderDialog: () => Promise<string | null>
+    onUpdateStatus: (cb: (s: { phase: string; version?: string; percent?: number; error?: string }) => void) => () => void
   }
 }

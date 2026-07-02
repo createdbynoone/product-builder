@@ -29,20 +29,40 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.109.1",
+    "electron-updater": "^6.8.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "build": {
     "appId": "com.brotherhood.productbuilder",
     "productName": "Product Builder",
+    "publish": {
+      "provider": "github",
+      "owner": "createdbynoone",
+      "repo": "product-builder",
+      "releaseType": "release"
+    },
     "mac": {
       "category": "public.app-category.graphics-design",
+      "icon": "build/icon.icns",
       "target": [
         { "target": "dmg", "arch": ["arm64", "x64"] },
         { "target": "zip", "arch": ["arm64", "x64"] }
       ]
     },
+    "dmg": {
+      "background": "build/background.png",
+      "window": { "width": 540, "height": 380 },
+      "contents": [
+        { "x": 130, "y": 216, "type": "file" },
+        { "x": 410, "y": 216, "type": "link", "path": "/Applications" }
+      ],
+      "iconSize": 80
+    },
     "directories": { "output": "release" },
-    "files": ["out/**/*"]
+    "files": ["out/**/*"],
+    "extraResources": [
+      { "from": "build/icons", "to": "icons", "filter": ["**/*.png"] }
+    ]
   }
 }
