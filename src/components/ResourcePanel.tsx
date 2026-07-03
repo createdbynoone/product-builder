@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react'
+import { RENDER_DRAG_MIME } from './PreviewPanel'
 
 const MAX_RESOURCES = 14
 
@@ -15,6 +16,12 @@ export function ResourcePanel({ resources, onResources, usedIndices, onInsertTag
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setDraggingOver(false)
+    // Render dragged from the preview panel — its path is already local
+    const renderPath = e.dataTransfer.getData(RENDER_DRAG_MIME)
+    if (renderPath) {
+      if (!resources.includes(renderPath)) onResources([...resources, renderPath].slice(0, MAX_RESOURCES))
+      return
+    }
     const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'))
     if (files.length === 0) return
     const paths = files.map((f) => { try { return window.pb.getPathForFile(f) } catch { return '' } }).filter(Boolean)

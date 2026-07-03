@@ -1,5 +1,8 @@
 import React from 'react'
 
+// Internal drag payload — lets renders be dropped into ResourcePanel as resources
+export const RENDER_DRAG_MIME = 'application/x-pb-render'
+
 export interface Render {
   path: string
   timestamp: number
@@ -52,6 +55,9 @@ export function PreviewPanel({ renders, selected, onSelect, building, progress }
             key={selected.path}
             src={`localfile://${selected.path}`}
             alt="Render"
+            draggable
+            onDragStart={(e) => e.dataTransfer.setData(RENDER_DRAG_MIME, selected.path)}
+            title="Arrastra a Resources para usarlo como recurso"
             className="max-w-full max-h-full object-contain rounded-lg border border-border animate-fade-in"
           />
         ) : (
@@ -92,7 +98,9 @@ export function PreviewPanel({ renders, selected, onSelect, building, progress }
                 <button
                   key={r.path}
                   onClick={() => onSelect(r)}
-                  title={`${r.aspectRatio} · ${r.resolution.toUpperCase()}`}
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData(RENDER_DRAG_MIME, r.path)}
+                  title={`${r.aspectRatio} · ${r.resolution.toUpperCase()} — arrastra a Resources`}
                   className={`flex-shrink-0 rounded-md overflow-hidden border transition-all duration-150 ${
                     selected?.path === r.path ? 'border-accent/70 ring-1 ring-accent/30' : 'border-border hover:border-white/30'
                   }`}

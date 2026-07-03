@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react'
+import { RENDER_DRAG_MIME } from './PreviewPanel'
 
 const VIEWS = ['FRONT', 'BACK'] as const
 export type TechnicalView = typeof VIEWS[number]
@@ -20,6 +21,9 @@ export function TechnicalPanel({ reference, onReference, notes, onNotes, view, o
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setDraggingOver(false)
+    // Render dragged from the preview panel — use it directly as reference
+    const renderPath = e.dataTransfer.getData(RENDER_DRAG_MIME)
+    if (renderPath) { onReference(renderPath); return }
     const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith('image/'))
     if (!file) return
     try {

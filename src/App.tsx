@@ -6,10 +6,10 @@ import { BuildBar, Ratio, Resolution } from './components/BuildBar'
 import { TechnicalPanel, TechnicalView } from './components/TechnicalPanel'
 import { UpdateBar } from './components/UpdateBar'
 
-type Mode = 'build' | 'technical'
+type Mode = 'product' | 'technical'
 
 export default function App() {
-  const [mode, setMode] = useState<Mode>('build')
+  const [mode, setMode] = useState<Mode>('product')
   const [resources, setResources] = useState<string[]>([])
   const [prompt, setPrompt] = useState('')
   const [techReference, setTechReference] = useState<string | null>(null)
@@ -145,7 +145,7 @@ export default function App() {
           {version && <span className="text-[10.5px] font-mono text-text-muted">v{version}</span>}
         </div>
         <div className="titlebar-nodrag flex items-center bg-surface border border-border rounded-md p-0.5 gap-0.5 translate-y-[1px]">
-          {(['build', 'technical'] as const).map((m) => (
+          {(['product', 'technical'] as const).map((m) => (
             <button
               key={m}
               onClick={() => setMode(m)}
@@ -172,8 +172,8 @@ export default function App() {
 
       {/* Main 3-panel layout */}
       <div className="flex flex-1 min-h-0">
-        {/* Left — resources (build mode only) */}
-        {mode === 'build' && (
+        {/* Left — resources (product mode only) */}
+        {mode === 'product' && (
           <div className="w-[228px] flex-shrink-0">
             <ResourcePanel
               resources={resources}
@@ -186,7 +186,7 @@ export default function App() {
 
         {/* Center — prompt + controls */}
         <div className="flex flex-col flex-1 min-w-0">
-          {mode === 'build' ? (
+          {mode === 'product' ? (
             <>
               <PromptPanel
                 ref={textareaRef}
