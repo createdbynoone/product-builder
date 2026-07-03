@@ -571,6 +571,139 @@ ipcMain.handle('fire-technical', async (event, { imagePath, notes, view }: {
   }
 })
 
+// ─── Enhance (mockup → photoreal e-commerce, Nano Banana 2 via POYO) ──────────
+// Distilled from the Enhance-Brotherhood skill: Claude expands basic material
+// notes into a full NB2 prompt using the brand's technique vocabulary and
+// ultra-premium rendering standards, then NB2-edit transforms the reference.
+
+const ENHANCE_VIEWS = ['FRONT', 'BACK'] as const
+
+const ENHANCE_SYSTEM_PROMPT = `You are a prompt engineer for Nano Banana 2 image-to-image editing, specialized in turning streetwear garment mockups/flats into ULTRA-PREMIUM photorealistic e-commerce product shots. You receive the reference image, the view (FRONT or BACK), and the user's basic material notes (often Spanish). You write ONE final English prompt.
+
+PROMPT STRUCTURE:
+1. Open: "Transform this mockup into a photorealistic e-commerce [VIEW] product shot of the EXACT SAME [garment-type] — preserve the silhouette, construction, proportions, and the precise placement, scale and angle of every graphic and component from the reference."
+2. Garment body block — identify the category from the image and use category-appropriate materials (never 320gsm jersey for everything): tees 280–320gsm combed cotton jersey; hoodies/crewnecks/sweatpants 380–450gsm brushed-back fleece or French terry; jeans 12–14oz denim with its wash; caps structured cotton twill/canvas; knits gauge-specific yarn. Read the body color from the image (give a hex). Ultra-premium language: finest long-staple combed cotton, perfectly even weave, couture-level stitching with perfect tension, garment-dyed with exceptional pigment uniformity, jewellery-grade hardware highlights.
+3. Graphics/prints — preserve each one exactly as placed; render its technique from the user's notes:
+   - "serigrafía relieve"/"puff": foamy raised ink 2–3mm, rounded top, soft matte, tactilely on top of fibers
+   - "alta densidad": thick plastisol raised 1.5–2mm, sharp 90-degree edges, satin finish, flat-topped (NOT puff)
+   - "serigrafía plana": thin matte ink film absorbed flat into the weave, zero relief
+   - "sublimado": dye permeates fibers, NO ink film, NO relief, weave visible through image, soft edges; default TONE-ON-TONE (same family as body, 1–2 shades darker) unless user names a color
+   - "laser": top fibers lightened tonally, no ink, no relief, weave visible, slightly warmer/lighter than body
+   - "serigrafía trazo": outline-only strokes ~1.5–2mm, no fill, flat absorbed ink
+   - "bordado"/"bordado acolchado": satin-stitch embroidery; acolchado = over EVA foam, puffy domed 2–3mm, stitch direction visible
+   - "estampado vintage": cracked plastisol, hairline cracks, pinholes, faded halftone aging, flat
+   - "golpes de costura FUERTES": [color] dye halo 3–5cm radiating from collar/sleeve/hem seams, saturated
+   - "golpes de costura LEVES": barely perceptible tint ≤6–8mm from stitch lines, very low opacity
+   - photo prints: PANEL = bordered rectangle; BLEED = borderless, fades softly into fabric
+   If notes don't specify a technique, infer the most natural one from the mockup and keep it subtle.
+4. NEVER add brand components not visible in the reference (tags, patches, labels). BACK view: no side-seam tag block at all.
+5. Presentation: ghost/invisible mannequin for tops with natural shoulder volume; flat-lay for pants/shorts; head-form or 3/4 angle for caps. Full garment in frame with breathing room.
+6. NON-NEGOTIABLE GLOBAL STANDARDS: garment smooth and flawless — NO creases, NO fold lines, NO wrinkles, pressed crisp as professionally styled; background seamless flat #ededed, perfectly even, NO gradient, NO contact shadow, no shadow halo — completely clean; lighting soft diffused studio softbox ~5500K, no harsh shadows, every material reading as a distinct surface (cotton weave vs ink relief vs metal); ultra-high detail, sharp fabric and thread texture, true color, commercial e-commerce quality.
+
+Output ONLY the final prompt text, no preamble, under 350 words.`
+
+function composeEnhanceFallbackPrompt(view: string, notes: string): string {
+  return (
+    `Transform this mockup into a photorealistic e-commerce ${view} product shot of the EXACT SAME garment — preserve the silhouette, construction, proportions, and the precise placement, scale and angle of every graphic and component from the reference. Do not add any component not visible in the reference.\n\n` +
+    (notes.trim() ? `MATERIALS AND TECHNIQUES: ${notes.trim()}\n\n` : '') +
+    `Ultra-premium construction: finest long-staple combed cotton with perfectly even weave, couture-level stitching with perfect tension, garment-dyed with exceptional pigment uniformity. Garment displayed smooth and flawless — NO creases, NO fold lines, NO wrinkles, pressed crisp as if professionally styled. Presentation: invisible ghost mannequin (flat-lay if pants/shorts, head-form if cap), ${view} view centered, full garment in frame with breathing room. Lighting: soft diffused studio softbox ~5500K, no harsh shadows, every material reading as a distinct tactile surface. Background: seamless flat #ededed, perfectly even, no gradient, no contact shadow, completely clean. Output: ultra-high detail, sharp fabric and thread texture, true color reproduction, commercial e-commerce product photography quality.`
+  )
+}
+
+async function composeEnhancePrompt(imagePath: string, notes: string, view: string): Promise<string> {
+  if (!process.env.ANTHROPIC_API_KEY) return composeEnhanceFallbackPrompt(view, notes)
+  const encoded = resizeAndEncode(imagePath)
+  if (!encoded) return composeEnhanceFallbackPrompt(view, notes)
+  const message = await anthropic.messages.create({
+    model: 'claude-opus-4-8',
+    max_tokens: 1024,
+    system: ENHANCE_SYSTEM_PROMPT,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: encoded.mediaType, data: encoded.b64 } },
+        { type: 'text', text: `VIEW: ${view}${notes.trim() ? `\nMATERIAL NOTES: ${notes.trim()}` : '\n(no notes — infer materials from the image)'}\n\nWrite the enhance prompt now.` },
+      ],
+    }],
+  })
+  const block = message.content[0]
+  if (block.type !== 'text') throw new Error('Unexpected prompt-composer response')
+  return block.text.trim()
+}
+
+ipcMain.handle('fire-enhance', async (event, { imagePath, notes, view }: {
+  imagePath: string; notes: string; view: string
+}) => {
+  if (!ENHANCE_VIEWS.includes(view as typeof ENHANCE_VIEWS[number])) throw new Error('Invalid view')
+  if (typeof notes !== 'string' || notes.length > 4000) throw new Error('Invalid notes')
+  if (typeof imagePath !== 'string' || imagePath.length === 0) throw new Error('Drop a product image to enhance')
+
+  const apiKey = process.env.POYO_API_KEY
+  if (!apiKey) throw new Error('POYO_API_KEY not set — add it to ~/.productbuilder.env')
+
+  const sendProgress = (line: string) => event.sender.send('pb-progress', line)
+  const timestamp = Date.now()
+  const outputDir = loadPrefs().outputPath
+
+  let prompt: string
+  try {
+    sendProgress('Composing enhance prompt with Claude...')
+    prompt = await composeEnhancePrompt(imagePath, notes, view)
+    sendProgress('Prompt ready ✓')
+  } catch (err) {
+    sendProgress(`Claude unavailable (${err instanceof Error ? err.message : err}) — using base template`)
+    prompt = composeEnhanceFallbackPrompt(view, notes)
+  }
+
+  const fallbackToHiggsfield = async (poyoError: string) => {
+    sendProgress(`POYO failed: ${poyoError}`)
+    const r = await buildViaHiggsfield(prompt, [imagePath], '4:5', '2K', outputDir, timestamp, sendProgress, 'pb_enh')
+    if (!r.success) {
+      const msg = `POYO: ${poyoError} · ${r.error}`
+      sendProgress(`Error: ${msg}`)
+      return { success: false, outputPath: '', error: msg }
+    }
+    return r
+  }
+
+  let imageUrls: string[] = []
+  try {
+    imageUrls = await uploadResourcesToPOYO([imagePath], apiKey, sendProgress)
+  } catch (err) {
+    return fallbackToHiggsfield(err instanceof Error ? err.message : String(err))
+  }
+
+  sendProgress(`Submitting enhance (${view} · 4:5 · 2K)...`)
+
+  const submitRes = await fetch('https://api.poyo.ai/api/generate/submit', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'nano-banana-2-edit', input: { prompt, size: '4:5', resolution: '2K', image_urls: imageUrls } }),
+  })
+  const submitData = await submitRes.json() as { code?: number; data?: { task_id: string }; error?: { message: string } }
+  if (!submitRes.ok || !submitData.data?.task_id) {
+    return fallbackToHiggsfield(`submit error: ${submitData.error?.message ?? `HTTP ${submitRes.status}`}`)
+  }
+
+  sendProgress(`Enhancing... (${submitData.data.task_id})`)
+
+  try {
+    const files = await pollPOYOTask(submitData.data.task_id, apiKey, sendProgress)
+    const imgFile = files.find((f) => f.file_type === 'image' || f.file_url.match(/\.(jpg|jpeg|png|webp)/i))
+    if (!imgFile) return fallbackToHiggsfield('no image in response')
+    const ext = imgFile.file_url.split('.').pop()?.split('?')[0] ?? 'png'
+    const outputName = `pb_enh_${timestamp}.${ext}`
+    const outputPath = join(outputDir, outputName)
+    sendProgress('Downloading enhanced render...')
+    await downloadFile(imgFile.file_url, outputPath)
+    sessionRenders.add(outputPath)
+    sendProgress(`Saved: ${outputName}`)
+    return { success: true, outputPath }
+  } catch (err) {
+    return fallbackToHiggsfield(err instanceof Error ? err.message : String(err))
+  }
+})
+
 ipcMain.handle('reveal-render', (_event, path: string) => {
   if (typeof path !== 'string' || !sessionRenders.has(path)) throw new Error('Unknown render path')
   shell.showItemInFolder(path)

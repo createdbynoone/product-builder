@@ -4,9 +4,10 @@ import { PromptPanel } from './components/PromptPanel'
 import { PreviewPanel, Render } from './components/PreviewPanel'
 import { BuildBar, Ratio, Resolution } from './components/BuildBar'
 import { TechnicalPanel, TechnicalView } from './components/TechnicalPanel'
+import { EnhancePanel, EnhanceView } from './components/EnhancePanel'
 import { UpdateBar } from './components/UpdateBar'
 
-type Mode = 'product' | 'technical'
+type Mode = 'product' | 'technical' | 'enhance'
 
 export default function App() {
   const [mode, setMode] = useState<Mode>('product')
@@ -15,6 +16,9 @@ export default function App() {
   const [techReference, setTechReference] = useState<string | null>(null)
   const [techNotes, setTechNotes] = useState('')
   const [techView, setTechView] = useState<TechnicalView>('FRONT')
+  const [enhReference, setEnhReference] = useState<string | null>(null)
+  const [enhNotes, setEnhNotes] = useState('')
+  const [enhView, setEnhView] = useState<EnhanceView>('FRONT')
   const [ratio, setRatio] = useState<Ratio>('1:1')
   const [resolution, setResolution] = useState<Resolution>('2k')
   const [building, setBuilding] = useState(false)
@@ -123,6 +127,27 @@ export default function App() {
     }
   }, [building, techReference, techNotes, techView])
 
+  const handleEnhance = useCallback(async () => {
+    if (building || enhReference === null) return
+    setBuilding(true)
+    setProgress([])
+    setError('')
+    try {
+      const res = await window.pb.fireEnhance({ imagePath: enhReference, notes: enhNotes, view: enhView })
+      if (res.success && res.outputPath) {
+        const render: Render = { path: res.outputPath, timestamp: Date.now(), aspectRatio: '4:5', resolution: '2k' }
+        setRenders((prev) => [...prev, render])
+        setSelected(render)
+      } else if (res.error) {
+        setError(res.error)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBuilding(false)
+    }
+  }, [building, enhReference, enhNotes, enhView])
+
   const chooseOutputFolder = useCallback(async () => {
     const folder = await window.pb.openFolderDialog()
     if (folder) {
@@ -145,7 +170,7 @@ export default function App() {
           {version && <span className="text-[10.5px] font-mono text-text-muted">v{version}</span>}
         </div>
         <div className="titlebar-nodrag flex items-center bg-surface border border-border rounded-md p-0.5 gap-0.5 translate-y-[1px]">
-          {(['product', 'technical'] as const).map((m) => (
+          {(['product', 'technical', 'enhance'] as const).map((m) => (
             <button
               key={m}
               onClick={() => setMode(m)}
@@ -213,7 +238,7 @@ export default function App() {
                 onBuild={handleBuild}
               />
             </>
-          ) : (
+          ) : mode === 'technical' ? (
             <>
               <TechnicalPanel
                 reference={techReference}
@@ -224,6 +249,24 @@ export default function App() {
                 onView={setTechView}
                 drawing={building}
                 onDraw={handleDrawTechnical}
+              />
+              {error && (
+                <div className="mx-4 mb-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg animate-fade-in">
+                  <p className="text-[11.7px] font-mono text-red-400/90 leading-relaxed selectable">{error}</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <EnhancePanel
+                reference={enhReference}
+                onReference={setEnhReference}
+                notes={enhNotes}
+                onNotes={setEnhNotes}
+                view={enhView}
+                onView={setEnhView}
+                enhancing={building}
+                onEnhance={handleEnhance}
               />
               {error && (
                 <div className="mx-4 mb-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg animate-fade-in">
