@@ -460,7 +460,7 @@ ipcMain.handle('fire-build', async (event, { prompt, resources, aspectRatio, res
 
 // ─── Technical drawings (Nano Banana 2 via POYO) ─────────────────────────────
 
-const TECHNICAL_VIEWS = ['FRONT', 'BACK'] as const
+const TECHNICAL_VIEWS = ['FRONT', 'BACK', 'SIDE', 'DETAIL'] as const
 
 // Fixed style contract — every technical drawing shares these exact parameters.
 // NB2 is photoreal-biased image-to-image: the style-override block MUST open the
@@ -483,13 +483,13 @@ function composeTechnicalPrompt(view: string, notes: string, hasReference: boole
     alignment: 'centered',
   }
   const subject = hasReference
-    ? `${view} view technical flat of the exact garment in the reference image, preserving its exact proportions, silhouette and every construction seam. The result is a plain blank line-drawing version of this garment, like a mockup template.`
+    ? `${view} view technical flat of the exact item in the reference image — any garment or accessory (t-shirt, hoodie, pants, shorts, cap, bag...) — preserving its exact proportions, silhouette and every construction seam and panel. The result is a plain blank line-drawing version of this item, like a mockup template.`
     : `${view} view technical flat of: ${notes.trim()}`
   const extraNotes = hasReference && notes.trim() ? `\n\nCONSTRUCTION NOTES: ${notes.trim()}` : ''
   return (
     `Technical fashion flat drawing. Vector illustration style. Adobe Illustrator flat design. NOT a photograph. NOT photorealistic. NOT a 3D render.\n\n` +
     `${subject}${extraNotes}\n\n` +
-    `STRICT RENDERING RULES: pure black line art on a plain white background; every single line — outer silhouette and internal construction seams alike — at the exact same uniform 2pt solid black stroke weight, zero variation, no tapering; ALL stitching and topstitch lines drawn as fine dashed lines; ribbed collar, cuffs and waistbands drawn with evenly-spaced short vertical rib lines across the band; garment surface completely blank — NO prints, NO logos, NO graphics; perfectly clean and technical — NO wrinkles, NO drape or fold marks, NO extra strokes, NO shading, NO fills, NO gradients, NO text, NO labels. Ghost flat presentation, perfectly symmetric, centered with even margins.\n\n` +
+    `STRICT RENDERING RULES: pure black line art on a plain white background; every single line — outer silhouette, panel seams and internal construction alike — at the exact same uniform 2pt solid black stroke weight, zero variation, no tapering; ALL stitching and topstitch lines drawn as fine dashed lines; any ribbed band (collar, cuffs, waistband) drawn with evenly-spaced short vertical rib lines; construction elements included as clean line work when present: pockets, belt loops, fly and plackets, drawcords and tips, waistband, cap panels and eyelets, visor, closures, buttons, zippers — hardware in outline only; item surface completely blank — NO prints, NO logos, NO graphics; perfectly clean and technical — NO wrinkles, NO drape or fold marks, NO extra strokes, NO shading, NO fills, NO gradients, NO text, NO labels. Ghost flat presentation, symmetric where the item is symmetric, centered with even margins.\n\n` +
     JSON.stringify(params)
   )
 }

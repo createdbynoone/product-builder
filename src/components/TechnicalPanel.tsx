@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react'
 import { RENDER_DRAG_MIME } from './PreviewPanel'
 
-const VIEWS = ['FRONT', 'BACK'] as const
+const VIEWS = ['FRONT', 'BACK', 'SIDE', 'DETAIL'] as const
 export type TechnicalView = typeof VIEWS[number]
 
 interface TechnicalPanelProps {
@@ -85,10 +85,10 @@ export function TechnicalPanel({ reference, onReference, notes, onNotes, view, o
                 <path d="M8 3l-5 3.5v4L7 12v9h10v-9l4-1.5v-4L16 3l-2 2h-4L8 3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
               </svg>
               <span className="text-[11.7px] text-text-muted font-heading uppercase tracking-widest">
-                Drop garment reference
+                Drop product reference
               </span>
               <span className="text-[11px] text-text-muted/70 leading-relaxed">
-                foto real o mockup — el dibujo respeta sus proporciones
+                foto real o mockup — tees, pantalones, shorts, gorras...
               </span>
             </div>
           )}
