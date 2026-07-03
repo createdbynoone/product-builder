@@ -605,7 +605,9 @@ PROMPT STRUCTURE:
 7. Presentation: ghost/invisible mannequin for tops with natural shoulder volume; flat-lay for pants/shorts; head-form or 3/4 angle for caps. Full garment in frame with breathing room.
 8. NON-NEGOTIABLE GLOBAL STANDARDS: garment smooth and flawless — NO creases, NO fold lines, NO wrinkles, pressed crisp as professionally styled; background seamless flat #ededed, perfectly even, NO gradient, NO contact shadow, no shadow halo — completely clean; lighting soft diffused studio softbox ~5500K, no harsh shadows, every material reading as a distinct surface (cotton weave vs ink relief vs metal); ultra-high detail, sharp fabric and thread texture, true color, commercial e-commerce quality.
 
-Output ONLY the final prompt text, no preamble, under 350 words.`
+You may receive ONE reference (FRONT or BACK) or BOTH. With both, output TWO coordinated prompts: the FRONT prompt first, then a line containing exactly "=====BACK=====", then the BACK prompt. Both prompts share an IDENTICAL garment-body block — same fabric, color hex, weight and construction wording — so the two renders read as the same physical garment; only view-specific graphics, components and framing differ. The BACK prompt must state "This is the same garment as the front-view shot — identical body and materials." and must NOT include any side-seam tag.
+
+Output ONLY the final prompt text(s), no preamble, under 350 words per prompt.`
 
 function composeEnhanceFallbackPrompt(view: string, notes: string): string {
   return (
@@ -617,71 +619,67 @@ function composeEnhanceFallbackPrompt(view: string, notes: string): string {
   )
 }
 
-async function composeEnhancePrompt(imagePath: string, notes: string, view: string): Promise<string> {
-  if (!process.env.ANTHROPIC_API_KEY) return composeEnhanceFallbackPrompt(view, notes)
-  const encoded = resizeAndEncode(imagePath)
-  if (!encoded) return composeEnhanceFallbackPrompt(view, notes)
+type EnhanceJob = { view: typeof ENHANCE_VIEWS[number]; path: string }
+
+// One Claude call composes all prompts — with FRONT+BACK it writes two
+// coordinated prompts sharing an identical garment-body block (skill pattern)
+async function composeEnhancePrompts(jobs: EnhanceJob[], notes: string): Promise<Record<string, string>> {
+  const fallback = () => Object.fromEntries(jobs.map((j) => [j.view, composeEnhanceFallbackPrompt(j.view, notes)]))
+  if (!process.env.ANTHROPIC_API_KEY) return fallback()
+
+  const encoded = jobs.map((j) => ({ job: j, enc: resizeAndEncode(j.path) }))
+  if (encoded.some((e) => e.enc === null)) return fallback()
+
+  const dual = jobs.length === 2
+  const content: Anthropic.MessageParam['content'] = encoded.flatMap(({ job, enc }) => [
+    { type: 'text' as const, text: `${job.view} reference:` },
+    { type: 'image' as const, source: { type: 'base64' as const, media_type: enc!.mediaType, data: enc!.b64 } },
+  ])
+  content.push({
+    type: 'text',
+    text: `${dual ? 'VIEWS: FRONT and BACK — write the two coordinated prompts separated by the "=====BACK=====" line' : `VIEW: ${jobs[0].view}`}${notes.trim() ? `\nMATERIAL NOTES: ${notes.trim()}` : '\n(no notes — infer materials from the images)'}\n\nWrite the enhance prompt${dual ? 's' : ''} now.`,
+  })
+
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-5',
-    max_tokens: 1024,
+    max_tokens: dual ? 2048 : 1024,
     system: ENHANCE_SYSTEM_PROMPT,
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'image', source: { type: 'base64', media_type: encoded.mediaType, data: encoded.b64 } },
-        { type: 'text', text: `VIEW: ${view}${notes.trim() ? `\nMATERIAL NOTES: ${notes.trim()}` : '\n(no notes — infer materials from the image)'}\n\nWrite the enhance prompt now.` },
-      ],
-    }],
+    messages: [{ role: 'user', content }],
   })
   const block = message.content[0]
   if (block.type !== 'text') throw new Error('Unexpected prompt-composer response')
-  return block.text.trim()
+  if (!dual) return { [jobs[0].view]: block.text.trim() }
+
+  const [front, back] = block.text.split('=====BACK=====')
+  if (!front?.trim() || !back?.trim()) return fallback()
+  return { FRONT: front.trim(), BACK: back.trim() }
 }
 
-ipcMain.handle('fire-enhance', async (event, { imagePath, notes, view }: {
-  imagePath: string; notes: string; view: string
-}) => {
-  if (!ENHANCE_VIEWS.includes(view as typeof ENHANCE_VIEWS[number])) throw new Error('Invalid view')
-  if (typeof notes !== 'string' || notes.length > 4000) throw new Error('Invalid notes')
-  if (typeof imagePath !== 'string' || imagePath.length === 0) throw new Error('Drop a product image to enhance')
-
-  const apiKey = process.env.POYO_API_KEY
-  if (!apiKey) throw new Error('POYO_API_KEY not set — add it to ~/.productbuilder.env')
-
-  const sendProgress = (line: string) => event.sender.send('pb-progress', line)
-  const timestamp = Date.now()
-  const outputDir = loadPrefs().outputPath
-
-  let prompt: string
-  try {
-    sendProgress('Composing enhance prompt with Claude...')
-    prompt = await composeEnhancePrompt(imagePath, notes, view)
-    sendProgress('Prompt ready ✓')
-  } catch (err) {
-    sendProgress(`Claude unavailable (${err instanceof Error ? err.message : err}) — using base template`)
-    prompt = composeEnhanceFallbackPrompt(view, notes)
-  }
+// Full generation for one view: upload → NB2-edit → download, with Higgsfield fallback
+async function runEnhanceGeneration(
+  job: EnhanceJob, prompt: string, apiKey: string,
+  outputDir: string, timestamp: number,
+  sendProgress: (l: string) => void,
+): Promise<{ success: boolean; outputPath: string; error?: string }> {
+  const tag = `[${job.view}]`
+  const p = (l: string) => sendProgress(`${tag} ${l}`)
+  const filePrefix = `pb_enh_${job.view.toLowerCase()}`
 
   const fallbackToHiggsfield = async (poyoError: string) => {
-    sendProgress(`POYO failed: ${poyoError}`)
-    const r = await buildViaHiggsfield(prompt, [imagePath], '4:5', '2K', outputDir, timestamp, sendProgress, 'pb_enh')
-    if (!r.success) {
-      const msg = `POYO: ${poyoError} · ${r.error}`
-      sendProgress(`Error: ${msg}`)
-      return { success: false, outputPath: '', error: msg }
-    }
+    p(`POYO failed: ${poyoError}`)
+    const r = await buildViaHiggsfield(prompt, [job.path], '4:5', '2K', outputDir, timestamp, p, filePrefix)
+    if (!r.success) return { success: false, outputPath: '', error: `${tag} POYO: ${poyoError} · ${r.error}` }
     return r
   }
 
   let imageUrls: string[] = []
   try {
-    imageUrls = await uploadResourcesToPOYO([imagePath], apiKey, sendProgress)
+    imageUrls = await uploadResourcesToPOYO([job.path], apiKey, p)
   } catch (err) {
     return fallbackToHiggsfield(err instanceof Error ? err.message : String(err))
   }
 
-  sendProgress(`Submitting enhance (${view} · 4:5 · 2K)...`)
-
+  p('Submitting enhance (4:5 · 2K)...')
   const submitRes = await fetch('https://api.poyo.ai/api/generate/submit', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -692,22 +690,68 @@ ipcMain.handle('fire-enhance', async (event, { imagePath, notes, view }: {
     return fallbackToHiggsfield(`submit error: ${submitData.error?.message ?? `HTTP ${submitRes.status}`}`)
   }
 
-  sendProgress(`Enhancing... (${submitData.data.task_id})`)
-
+  p(`Enhancing... (${submitData.data.task_id})`)
   try {
-    const files = await pollPOYOTask(submitData.data.task_id, apiKey, sendProgress)
+    const files = await pollPOYOTask(submitData.data.task_id, apiKey, p)
     const imgFile = files.find((f) => f.file_type === 'image' || f.file_url.match(/\.(jpg|jpeg|png|webp)/i))
     if (!imgFile) return fallbackToHiggsfield('no image in response')
     const ext = imgFile.file_url.split('.').pop()?.split('?')[0] ?? 'png'
-    const outputName = `pb_enh_${timestamp}.${ext}`
+    const outputName = `${filePrefix}_${timestamp}.${ext}`
     const outputPath = join(outputDir, outputName)
-    sendProgress('Downloading enhanced render...')
+    p('Downloading enhanced render...')
     await downloadFile(imgFile.file_url, outputPath)
     sessionRenders.add(outputPath)
-    sendProgress(`Saved: ${outputName}`)
+    p(`Saved: ${outputName}`)
     return { success: true, outputPath }
   } catch (err) {
     return fallbackToHiggsfield(err instanceof Error ? err.message : String(err))
+  }
+}
+
+ipcMain.handle('fire-enhance', async (event, { frontPath, backPath, notes }: {
+  frontPath: string | null; backPath: string | null; notes: string
+}) => {
+  if (typeof notes !== 'string' || notes.length > 4000) throw new Error('Invalid notes')
+  if (frontPath !== null && typeof frontPath !== 'string') throw new Error('Invalid front path')
+  if (backPath !== null && typeof backPath !== 'string') throw new Error('Invalid back path')
+
+  const jobs: EnhanceJob[] = []
+  if (frontPath) jobs.push({ view: 'FRONT', path: frontPath })
+  if (backPath) jobs.push({ view: 'BACK', path: backPath })
+  if (jobs.length === 0) throw new Error('Drop a product image to enhance')
+
+  const apiKey = process.env.POYO_API_KEY
+  if (!apiKey) throw new Error('POYO_API_KEY not set — add it to ~/.productbuilder.env')
+
+  const sendProgress = (line: string) => event.sender.send('pb-progress', line)
+  const timestamp = Date.now()
+  const outputDir = loadPrefs().outputPath
+
+  let prompts: Record<string, string>
+  try {
+    sendProgress(`Composing ${jobs.length > 1 ? 'coordinated prompts' : 'enhance prompt'} with Claude...`)
+    prompts = await composeEnhancePrompts(jobs, notes)
+    sendProgress('Prompts ready ✓')
+  } catch (err) {
+    sendProgress(`Claude unavailable (${err instanceof Error ? err.message : err}) — using base template`)
+    prompts = Object.fromEntries(jobs.map((j) => [j.view, composeEnhanceFallbackPrompt(j.view, notes)]))
+  }
+
+  // Fire all views in parallel (skill pattern: halves wall time for front+back)
+  const results = await Promise.all(
+    jobs.map((j) => runEnhanceGeneration(j, prompts[j.view], apiKey, outputDir, timestamp, sendProgress))
+  )
+
+  const outputs = jobs
+    .map((j, i) => ({ view: j.view, outputPath: results[i].outputPath, ok: results[i].success }))
+    .filter((o) => o.ok)
+    .map(({ view, outputPath }) => ({ view, outputPath }))
+  const errors = results.filter((r) => !r.success).map((r) => r.error).filter(Boolean)
+
+  return {
+    success: outputs.length > 0,
+    outputs,
+    error: errors.length > 0 ? errors.join(' · ') : undefined,
   }
 })
 

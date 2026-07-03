@@ -14,7 +14,7 @@ contextBridge.exposeInMainWorld('pb', {
   fireTechnical: (data: { imagePath: string | null; notes: string; view: string }) =>
     ipcRenderer.invoke('fire-technical', data),
 
-  fireEnhance: (data: { imagePath: string; notes: string; view: string }) =>
+  fireEnhance: (data: { frontPath: string | null; backPath: string | null; notes: string }) =>
     ipcRenderer.invoke('fire-enhance', data),
 
   revealRender: (path: string) =>

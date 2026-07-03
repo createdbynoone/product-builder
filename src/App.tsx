@@ -4,7 +4,7 @@ import { PromptPanel } from './components/PromptPanel'
 import { PreviewPanel, Render } from './components/PreviewPanel'
 import { BuildBar, Ratio, Resolution } from './components/BuildBar'
 import { TechnicalPanel, TechnicalView } from './components/TechnicalPanel'
-import { EnhancePanel, EnhanceView } from './components/EnhancePanel'
+import { EnhancePanel } from './components/EnhancePanel'
 import { UpdateBar } from './components/UpdateBar'
 
 type Mode = 'product' | 'technical' | 'enhance'
@@ -16,9 +16,9 @@ export default function App() {
   const [techReference, setTechReference] = useState<string | null>(null)
   const [techNotes, setTechNotes] = useState('')
   const [techView, setTechView] = useState<TechnicalView>('FRONT')
-  const [enhReference, setEnhReference] = useState<string | null>(null)
+  const [enhFront, setEnhFront] = useState<string | null>(null)
+  const [enhBack, setEnhBack] = useState<string | null>(null)
   const [enhNotes, setEnhNotes] = useState('')
-  const [enhView, setEnhView] = useState<EnhanceView>('FRONT')
   const [ratio, setRatio] = useState<Ratio>('1:1')
   const [resolution, setResolution] = useState<Resolution>('2k')
   const [building, setBuilding] = useState(false)
@@ -168,25 +168,27 @@ export default function App() {
   }, [building, techReference, techNotes, techView])
 
   const handleEnhance = useCallback(async () => {
-    if (building || enhReference === null) return
+    if (building || (enhFront === null && enhBack === null)) return
     setBuilding(true)
     setProgress([])
     setError('')
     try {
-      const res = await window.pb.fireEnhance({ imagePath: enhReference, notes: enhNotes, view: enhView })
-      if (res.success && res.outputPath) {
-        const render: Render = { path: res.outputPath, timestamp: Date.now(), aspectRatio: '4:5', resolution: '2k' }
-        setRenders((prev) => [...prev, render])
-        setSelected(render)
-      } else if (res.error) {
-        setError(res.error)
+      const res = await window.pb.fireEnhance({ frontPath: enhFront, backPath: enhBack, notes: enhNotes })
+      if (res.outputs.length > 0) {
+        const now = Date.now()
+        const newRenders: Render[] = res.outputs.map((o) => ({
+          path: o.outputPath, timestamp: now, aspectRatio: '4:5', resolution: '2k',
+        }))
+        setRenders((prev) => [...prev, ...newRenders])
+        setSelected(newRenders[0])
       }
+      if (res.error) setError(res.error)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBuilding(false)
     }
-  }, [building, enhReference, enhNotes, enhView])
+  }, [building, enhFront, enhBack, enhNotes])
 
   const deleteRender = useCallback(async (r: Render) => {
     try {
@@ -309,12 +311,12 @@ export default function App() {
           ) : (
             <>
               <EnhancePanel
-                reference={enhReference}
-                onReference={setEnhReference}
+                frontRef={enhFront}
+                onFrontRef={setEnhFront}
+                backRef={enhBack}
+                onBackRef={setEnhBack}
                 notes={enhNotes}
                 onNotes={setEnhNotes}
-                view={enhView}
-                onView={setEnhView}
                 enhancing={building}
                 onEnhance={handleEnhance}
               />
