@@ -6,6 +6,7 @@ interface Window {
     fireTechnical: (data: { imagePath: string | null; notes: string; view: string }) => Promise<{ success: boolean; outputPath: string; error?: string }>
     fireEnhance: (data: { imagePath: string; notes: string; view: string }) => Promise<{ success: boolean; outputPath: string; error?: string }>
     revealRender: (path: string) => Promise<void>
+    trashRender: (path: string) => Promise<void>
     onProgress: (cb: (line: string) => void) => () => void
     getVersion: () => Promise<string>
     getOutputPath: () => Promise<string>

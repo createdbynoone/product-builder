@@ -148,6 +148,16 @@ export default function App() {
     }
   }, [building, enhReference, enhNotes, enhView])
 
+  const deleteRender = useCallback(async (r: Render) => {
+    try {
+      await window.pb.trashRender(r.path)
+      setRenders((prev) => prev.filter((x) => x.path !== r.path))
+      setSelected((prev) => (prev?.path === r.path ? null : prev))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }, [])
+
   const chooseOutputFolder = useCallback(async () => {
     const folder = await window.pb.openFolderDialog()
     if (folder) {
@@ -283,6 +293,7 @@ export default function App() {
             renders={renders}
             selected={selected}
             onSelect={setSelected}
+            onDelete={deleteRender}
             building={building}
             progress={progress}
           />

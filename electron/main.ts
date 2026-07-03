@@ -716,6 +716,13 @@ ipcMain.handle('reveal-render', (_event, path: string) => {
   shell.showItemInFolder(path)
 })
 
+// Move a session render to the macOS Trash (no permission dialogs)
+ipcMain.handle('trash-render', async (_event, path: string) => {
+  if (typeof path !== 'string' || !sessionRenders.has(path)) throw new Error('Unknown render path')
+  await shell.trashItem(path)
+  sessionRenders.delete(path)
+})
+
 // ─── Misc IPC ─────────────────────────────────────────────────────────────────
 
 ipcMain.handle('get-version', () => app.getVersion())

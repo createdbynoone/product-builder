@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 
 // Internal drag payload — lets renders be dropped into ResourcePanel as resources
 export const RENDER_DRAG_MIME = 'application/x-pb-render'
@@ -14,12 +14,28 @@ interface PreviewPanelProps {
   renders: Render[]
   selected: Render | null
   onSelect: (r: Render) => void
+  onDelete: (r: Render) => void
   building: boolean
   progress: string[]
 }
 
-export function PreviewPanel({ renders, selected, onSelect, building, progress }: PreviewPanelProps) {
+export function PreviewPanel({ renders, selected, onSelect, onDelete, building, progress }: PreviewPanelProps) {
   const lastLine = progress.length > 0 ? progress[progress.length - 1] : ''
+  const [shiftHeld, setShiftHeld] = useState(false)
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => { if (e.key === 'Shift') setShiftHeld(true) }
+    const up = (e: KeyboardEvent) => { if (e.key === 'Shift') setShiftHeld(false) }
+    const blur = () => setShiftHeld(false)
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    window.addEventListener('blur', blur)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+      window.removeEventListener('blur', blur)
+    }
+  }, [])
 
   return (
     <div className="flex flex-col h-full border-l border-border">
@@ -97,15 +113,22 @@ export function PreviewPanel({ renders, selected, onSelect, building, progress }
               {[...renders].reverse().map((r) => (
                 <button
                   key={r.path}
-                  onClick={() => onSelect(r)}
-                  draggable
+                  onClick={(e) => { if (e.shiftKey) { onDelete(r) } else { onSelect(r) } }}
+                  draggable={!shiftHeld}
                   onDragStart={(e) => e.dataTransfer.setData(RENDER_DRAG_MIME, r.path)}
-                  title={`${r.aspectRatio} · ${r.resolution.toUpperCase()} — arrastra a Resources`}
-                  className={`flex-shrink-0 rounded-md overflow-hidden border transition-all duration-150 ${
+                  title={shiftHeld ? 'Shift+click: borrar a la papelera' : `${r.aspectRatio} · ${r.resolution.toUpperCase()} — arrastra a Resources · Shift+hover para borrar`}
+                  className={`relative group flex-shrink-0 rounded-md overflow-hidden border transition-all duration-150 ${
                     selected?.path === r.path ? 'border-accent/70 ring-1 ring-accent/30' : 'border-border hover:border-white/30'
                   }`}
                 >
                   <img src={`localfile://${r.path}`} alt="" className="w-14 h-14 object-cover block" />
+                  {shiftHeld && (
+                    <span className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-100 flex items-center justify-center">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-red-400">
+                        <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </span>
+                  )}
                 </button>
               ))}
             </div>

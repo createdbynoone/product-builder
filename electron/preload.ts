@@ -20,6 +20,9 @@ contextBridge.exposeInMainWorld('pb', {
   revealRender: (path: string) =>
     ipcRenderer.invoke('reveal-render', path),
 
+  trashRender: (path: string) =>
+    ipcRenderer.invoke('trash-render', path),
+
   onProgress: (cb: (line: string) => void) => {
     ipcRenderer.on('pb-progress', (_event, line) => cb(line))
     return () => ipcRenderer.removeAllListeners('pb-progress')
