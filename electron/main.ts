@@ -236,6 +236,126 @@ ipcMain.handle('polish-prompt', async (_event, { prompt, resources }: { prompt: 
   return { prompt: block.text }
 })
 
+// ─── Technical drawings (Recraft V4.1 Vector) ────────────────────────────────
+
+const TECHNICAL_VIEWS = ['FRONT', 'BACK'] as const
+
+const TECHNICAL_ANALYZE_SYSTEM = `You are a garment technical analyst for a fashion flat-drawing pipeline. You receive a photo or mockup of a garment and must write a precise English description used to draw its technical flat.
+
+Rules:
+- Describe ONLY silhouette, proportions and construction: fit, shoulder type, body shape, sleeve type and length, collar/neckline type and finish, cuffs, hem, panel seams, pockets, closures, drawcords.
+- Proportions must be COHERENT with the image: express them as visual ratios and landmarks (e.g. "body length ≈ 1.2× chest width", "sleeve ends just above the elbow", "collar band tall, ≈ 3cm"). Never invent proportions the image doesn't show.
+- IGNORE all surface graphics: prints, embroidery, logos, artwork, labels — they are stripped from the drawing. Do not mention them.
+- Ignore wrinkles, drape, lighting and background — the flat is drawn perfectly smooth.
+- The requested VIEW is given by the user. If the image shows the other side, still describe construction for the requested view using what the garment type implies.
+- Output ONLY the description, one paragraph, max 110 words, no preamble.`
+
+// Fixed style contract — every technical drawing shares these exact parameters
+function composeTechnicalPrompt(description: string, view: string): string {
+  const params = {
+    drawing_type: 'technical_fashion_flat',
+    view,
+    canvas_ratio: '4:5',
+    background: '#FFFFFF',
+    stroke: { color: '#000000', weight_pt: 2, uniformity: 'all_lines_identical', no_taper: true },
+    stitching: { style: 'dashed_line', weight_pt: 2 },
+    rib_bands: { style: 'evenly_spaced_vertical_tick_lines' },
+    wrinkles: 'none',
+    fills: 'none',
+    shading: 'none',
+    text: 'none',
+    surface_graphics: 'none',
+    presentation: 'ghost_flat',
+    alignment: 'centered',
+    output: 'vector_line_art_only',
+  }
+  return (
+    `Technical fashion flat drawing, garment spec sheet style. ${view} view. ${description}\n\n` +
+    `STRICT RENDERING RULES: proportions faithful to the described garment; ribbed collar, ribbed cuffs and ribbed waistbands drawn with evenly-spaced short vertical rib lines across the band; ALL stitching and topstitch lines drawn as fine dashed lines; every line — outer silhouette and internal construction alike — at the exact same uniform 2pt solid black stroke weight, zero variation, no tapering, no thick-thin contrast; pure black line art on a plain white background; perfectly clean and technical — NO wrinkle lines, NO drape or fold marks, NO extra strokes, NO shading, NO fills, NO gradients, NO text, NO labels, NO annotations, NO surface graphics or prints of any kind. Ghost flat presentation, garment perfectly symmetric, centered on the canvas with even margins.\n\n` +
+    JSON.stringify(params)
+  )
+}
+
+async function analyzeGarmentForTechnical(imagePath: string, notes: string, view: string): Promise<string> {
+  const encoded = resizeAndEncode(imagePath)
+  if (!encoded) throw new Error('Could not read the reference image')
+  const message = await anthropic.messages.create({
+    model: 'claude-opus-4-8',
+    max_tokens: 512,
+    system: TECHNICAL_ANALYZE_SYSTEM,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: encoded.mediaType, data: encoded.b64 } },
+        { type: 'text', text: `VIEW: ${view}${notes.trim() ? `\nUSER NOTES: ${notes.trim()}` : ''}\n\nDescribe this garment for its technical flat drawing.` },
+      ],
+    }],
+  })
+  const block = message.content[0]
+  if (block.type !== 'text') throw new Error('Unexpected analysis response')
+  return block.text.trim()
+}
+
+ipcMain.handle('fire-technical', async (event, { imagePath, notes, view }: {
+  imagePath: string | null; notes: string; view: string
+}) => {
+  if (!TECHNICAL_VIEWS.includes(view as typeof TECHNICAL_VIEWS[number])) throw new Error('Invalid view')
+  if (typeof notes !== 'string' || notes.length > 4000) throw new Error('Invalid notes')
+  if (imagePath !== null && typeof imagePath !== 'string') throw new Error('Invalid image path')
+
+  const recraftKey = process.env.RECRAFT_API_KEY
+  if (!recraftKey) throw new Error('RECRAFT_API_KEY not set — add it to ~/.productbuilder.env')
+
+  const sendProgress = (line: string) => event.sender.send('pb-progress', line)
+  const timestamp = Date.now()
+  const outputDir = loadPrefs().outputPath
+
+  try {
+    let description = notes.trim()
+    if (imagePath) {
+      if (!process.env.ANTHROPIC_API_KEY) {
+        throw new Error('ANTHROPIC_API_KEY not set — needed to analyze the reference image')
+      }
+      sendProgress('Analyzing garment with Claude...')
+      description = await analyzeGarmentForTechnical(imagePath, notes, view)
+      sendProgress('Analysis done ✓')
+    }
+    if (!description) throw new Error('Drop a reference image or describe the garment')
+
+    const prompt = composeTechnicalPrompt(description, view)
+    sendProgress(`Submitting technical flat (${view} · 4:5 vector)...`)
+
+    const res = await fetch('https://external.api.recraft.ai/v1/images/generations', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${recraftKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'recraftv4_1_vector',
+        style: 'vector_illustration',
+        size: '4:5',
+        n: 1,
+        response_format: 'url',
+        prompt,
+      }),
+    })
+    const data = await res.json() as { data?: Array<{ url?: string }>; code?: string; message?: string }
+    if (!res.ok || !data.data?.[0]?.url) {
+      throw new Error(`Recraft: ${data.message ?? `HTTP ${res.status}`}`)
+    }
+
+    const outputName = `pb_tech_${timestamp}.svg`
+    const outputPath = join(outputDir, outputName)
+    sendProgress('Downloading vector...')
+    await downloadFile(data.data[0].url, outputPath)
+    sessionRenders.add(outputPath)
+    sendProgress(`Saved: ${outputName}`)
+    return { success: true, outputPath }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    sendProgress(`Error: ${msg}`)
+    return { success: false, outputPath: '', error: msg }
+  }
+})
+
 // ─── POYO.ai utilities (shared pattern with BMP) ──────────────────────────────
 
 const MAX_UPLOAD_PX = 1280

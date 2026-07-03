@@ -32,6 +32,16 @@ Electron app para **creación de producto** (no marketing): combina recursos eti
 5. El render se registra en `sessionRenders` (Set) — `reveal-render` solo actúa sobre paths de esa sesión
 6. **Fallback Higgsfield (v1.1.0):** si POYO falla en cualquier punto (upload, submit, poll o sin imagen), `fallbackToHiggsfield` muestra el diagnóstico (`POYO failed: <error_message>`) y reintenta automáticamente via CLI `higgsfield generate create nano_banana_2` con la misma config y los recursos locales como `--image`. Mapeos (el CLI no soporta todo): `3:4 → 4:5`, `4K → 2k`. El render del fallback se guarda igual (`pb_<timestamp>.<ext>`, sessionRenders)
 
+## Modo Technical (Recraft V4.1 Vector)
+
+Toggle `BUILD | TECHNICAL` en el titlebar. Genera dibujos técnicos planos de prendas (flat drawings) como **SVG vectorial editable**, siempre en lienzo **4:5**.
+
+- **Pipeline de 2 etapas:** (1) el usuario suelta una imagen de referencia (foto real o mockup) → Claude (`claude-opus-4-8`) la analiza y escribe la descripción con proporciones coherentes a la imagen, ignorando gráficos/arrugas; (2) `composeTechnicalPrompt` arma el prompt final con el bloque JSON fijo de estilo y dispara a Recraft. Sin referencia, las notas del usuario actúan como descripción directa
+- **Contrato de estilo fijo (JSON en el prompt):** trazos 2pt negros uniformes (todas las líneas idénticas), costuras/topstitch como línea discontinua, ribs (cuello/puños) con líneas verticales equiespaciadas, sin arrugas ni trazos extra, sin fills/sombras/texto/gráficos, ghost flat centrado, fondo blanco
+- **API Recraft:** `POST https://external.api.recraft.ai/v1/images/generations` con `model: recraftv4_1_vector`, `style: vector_illustration`, `size: "4:5"`, `response_format: url`. OJO: V4.1 Vector NO soporta `substyle`, `negative_prompt`, `controls.no_text` ni tamaños en píxeles tipo `1024x1280` — solo aspect strings (`"4:5"`). Devuelve URL a SVG (~80 créditos/gen)
+- **i2i descartado:** `/v1/images/imageToImage` con el modelo vector alucina (strength 0.35 convirtió un tee en puffer) — por eso el análisis Claude + text-to-image
+- Output: `pb_tech_<timestamp>.svg` en outputPath, registrado en `sessionRenders`
+
 ## Claude polish (opcional)
 
 - IPC `polish-prompt` — envía draft + recursos (como `@ImageN:` + imagen) a `claude-opus-4-8`
@@ -44,6 +54,7 @@ Lee `~/.productbuilder.env` primero, luego `~/.bmp.env` como fallback (comparte 
 ```
 POYO_API_KEY=...
 ANTHROPIC_API_KEY=...
+RECRAFT_API_KEY=...   # modo Technical — vive en ~/.productbuilder.env, NUNCA en el repo
 ```
 
 ## POYO API (mismo patrón que BMP)
@@ -81,6 +92,9 @@ Finish: `finished | completed | succeeded` · Error: `failed | error`
 - **v1.1.0:** (1) UpdateBar con inset izquierdo 92px — antes los semáforos de macOS chocaban con su contenido (la barra se monta ARRIBA del titlebar, así que los semáforos caen sobre esa fila); (2) fallback automático a Higgsfield cuando POYO falla (ver Flujo de build #6). Comando fallback probado end-to-end contra Higgsfield real
 - **Release workflow reescrito** tras 3 publishes inconsistentes de v1.1.0: el publisher GitHub de electron-builder corre tasks duplicados que se pisan entre sí. Ahora `publish.sh` = build `--publish never` + verificación sha512 + `gh release upload`. Además el disco Sandisk se desconectó a mitad de un publish (ENOENT en todo, `release/` desapareció) — si pasan cosas imposibles a mitad de build, verificar que el volumen siga montado
 - v1.1.0 publicado y verificado: los 9 assets con sha256 idéntico local vs GitHub
+
+### 2026-07-03 — Modo Technical (dev)
+- Nuevo modo Technical: dibujos técnicos de prendas via Recraft V4.1 Vector (ver sección arriba). Probado end-to-end contra la API real: text-to-image con el bloque de estilo produce flats limpios (rib con líneas, costuras discontinuas, trazo uniforme); imageToImage con el modelo vector descartado por alucinar. En dev, sin release aún
 
 ## Pendiente
 

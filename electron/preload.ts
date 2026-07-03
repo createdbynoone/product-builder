@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('pb', {
   fireBuild: (data: { prompt: string; resources: string[]; aspectRatio: string; resolution: string }) =>
     ipcRenderer.invoke('fire-build', data),
 
+  fireTechnical: (data: { imagePath: string | null; notes: string; view: string }) =>
+    ipcRenderer.invoke('fire-technical', data),
+
   revealRender: (path: string) =>
     ipcRenderer.invoke('reveal-render', path),
 

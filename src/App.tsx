@@ -3,11 +3,18 @@ import { ResourcePanel } from './components/ResourcePanel'
 import { PromptPanel } from './components/PromptPanel'
 import { PreviewPanel, Render } from './components/PreviewPanel'
 import { BuildBar, Ratio, Resolution } from './components/BuildBar'
+import { TechnicalPanel, TechnicalView } from './components/TechnicalPanel'
 import { UpdateBar } from './components/UpdateBar'
 
+type Mode = 'build' | 'technical'
+
 export default function App() {
+  const [mode, setMode] = useState<Mode>('build')
   const [resources, setResources] = useState<string[]>([])
   const [prompt, setPrompt] = useState('')
+  const [techReference, setTechReference] = useState<string | null>(null)
+  const [techNotes, setTechNotes] = useState('')
+  const [techView, setTechView] = useState<TechnicalView>('FRONT')
   const [ratio, setRatio] = useState<Ratio>('1:1')
   const [resolution, setResolution] = useState<Resolution>('2k')
   const [building, setBuilding] = useState(false)
@@ -95,6 +102,27 @@ export default function App() {
     }
   }, [building, prompt, resources, ratio, resolution])
 
+  const handleDrawTechnical = useCallback(async () => {
+    if (building || (techReference === null && techNotes.trim().length === 0)) return
+    setBuilding(true)
+    setProgress([])
+    setError('')
+    try {
+      const res = await window.pb.fireTechnical({ imagePath: techReference, notes: techNotes, view: techView })
+      if (res.success && res.outputPath) {
+        const render: Render = { path: res.outputPath, timestamp: Date.now(), aspectRatio: '4:5', resolution: 'svg' }
+        setRenders((prev) => [...prev, render])
+        setSelected(render)
+      } else if (res.error) {
+        setError(res.error)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBuilding(false)
+    }
+  }, [building, techReference, techNotes, techView])
+
   const chooseOutputFolder = useCallback(async () => {
     const folder = await window.pb.openFolderDialog()
     if (folder) {
@@ -116,6 +144,20 @@ export default function App() {
           </span>
           {version && <span className="text-[10.5px] font-mono text-text-muted">v{version}</span>}
         </div>
+        <div className="titlebar-nodrag flex items-center bg-surface border border-border rounded-md p-0.5 gap-0.5 translate-y-[1px]">
+          {(['build', 'technical'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              disabled={building}
+              className={`px-2.5 py-0.5 rounded text-[10.5px] font-heading font-semibold uppercase tracking-widest transition-colors ${
+                mode === m ? 'bg-accent/15 text-accent' : 'text-text-secondary hover:text-text-primary'
+              } ${building ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
         <button
           onClick={chooseOutputFolder}
           title={`Output: ${outputPath} — click para cambiar`}
@@ -130,42 +172,66 @@ export default function App() {
 
       {/* Main 3-panel layout */}
       <div className="flex flex-1 min-h-0">
-        {/* Left — resources */}
-        <div className="w-[228px] flex-shrink-0">
-          <ResourcePanel
-            resources={resources}
-            onResources={setResources}
-            usedIndices={usedIndices}
-            onInsertTag={insertTag}
-          />
-        </div>
+        {/* Left — resources (build mode only) */}
+        {mode === 'build' && (
+          <div className="w-[228px] flex-shrink-0">
+            <ResourcePanel
+              resources={resources}
+              onResources={setResources}
+              usedIndices={usedIndices}
+              onInsertTag={insertTag}
+            />
+          </div>
+        )}
 
         {/* Center — prompt + controls */}
         <div className="flex flex-col flex-1 min-w-0">
-          <PromptPanel
-            ref={textareaRef}
-            prompt={prompt}
-            onPrompt={setPrompt}
-            missingTags={missingTags}
-            polishing={polishing}
-            canPolish={prompt.trim().length > 0 && !building}
-            onPolish={handlePolish}
-            resourceCount={resources.length}
-          />
-          {error && (
-            <div className="mx-4 mb-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg animate-fade-in">
-              <p className="text-[11.7px] font-mono text-red-400/90 leading-relaxed selectable">{error}</p>
-            </div>
+          {mode === 'build' ? (
+            <>
+              <PromptPanel
+                ref={textareaRef}
+                prompt={prompt}
+                onPrompt={setPrompt}
+                missingTags={missingTags}
+                polishing={polishing}
+                canPolish={prompt.trim().length > 0 && !building}
+                onPolish={handlePolish}
+                resourceCount={resources.length}
+              />
+              {error && (
+                <div className="mx-4 mb-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg animate-fade-in">
+                  <p className="text-[11.7px] font-mono text-red-400/90 leading-relaxed selectable">{error}</p>
+                </div>
+              )}
+              <BuildBar
+                ratio={ratio}
+                onRatio={setRatio}
+                resolution={resolution}
+                onResolution={setResolution}
+                building={building}
+                canBuild={prompt.trim().length > 0}
+                onBuild={handleBuild}
+              />
+            </>
+          ) : (
+            <>
+              <TechnicalPanel
+                reference={techReference}
+                onReference={setTechReference}
+                notes={techNotes}
+                onNotes={setTechNotes}
+                view={techView}
+                onView={setTechView}
+                drawing={building}
+                onDraw={handleDrawTechnical}
+              />
+              {error && (
+                <div className="mx-4 mb-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg animate-fade-in">
+                  <p className="text-[11.7px] font-mono text-red-400/90 leading-relaxed selectable">{error}</p>
+                </div>
+              )}
+            </>
           )}
-          <BuildBar
-            ratio={ratio}
-            onRatio={setRatio}
-            resolution={resolution}
-            onResolution={setResolution}
-            building={building}
-            canBuild={prompt.trim().length > 0}
-            onBuild={handleBuild}
-          />
         </div>
 
         {/* Right — preview + session history */}
