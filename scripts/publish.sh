@@ -1,15 +1,43 @@
 #!/bin/bash
-# Builds and publishes each arch sequentially to avoid sha512 mismatch
-# caused by parallel code-signing when using --publish always directly.
+# Build locally, upload with gh — electron-builder's GitHub publisher races
+# against itself (duplicate publisher tasks re-upload the same assets and
+# overwrite each other), leaving release assets inconsistent with
+# latest-mac.yml. Building with --publish never and uploading the finished
+# artifacts in one gh call is deterministic: one build state, one upload.
+#
+# Note: package.json declares arch:["arm64","x64"] in its targets, so a single
+# electron-builder run builds both arches — never run it once per arch.
 set -e
+
+REPO="createdbynoone/product-builder"
+VERSION=$(node -p "require('./package.json').version")
+TAG="v$VERSION"
 
 echo "→ Building renderer / main / preload..."
 npx electron-vite build
 
-echo "→ Publishing arm64..."
-npx electron-builder --mac --arm64 --publish always
+echo "→ Building arm64 & x64 artifacts (no publish)..."
+npx electron-builder --mac --publish never
 
-echo "→ Publishing x64..."
-npx electron-builder --mac --x64 --publish always
+echo "→ Verifying latest-mac.yml against local artifacts..."
+for zip in release/Product.Builder-$VERSION-arm64.zip release/Product.Builder-$VERSION-x64.zip; do
+  local_sha=$(openssl dgst -sha512 -binary "$zip" | base64)
+  grep -qF "$local_sha" release/latest-mac.yml || { echo "✗ sha512 mismatch for $zip"; exit 1; }
+done
+echo "  sha512 OK"
+
+echo "→ Uploading to GitHub release $TAG..."
+gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 || gh release create "$TAG" --repo "$REPO" --title "$VERSION" --notes "Product Builder $VERSION"
+gh release upload "$TAG" \
+  release/Product.Builder-$VERSION-arm64.dmg \
+  release/Product.Builder-$VERSION-arm64.dmg.blockmap \
+  release/Product.Builder-$VERSION-arm64.zip \
+  release/Product.Builder-$VERSION-arm64.zip.blockmap \
+  release/Product.Builder-$VERSION-x64.dmg \
+  release/Product.Builder-$VERSION-x64.dmg.blockmap \
+  release/Product.Builder-$VERSION-x64.zip \
+  release/Product.Builder-$VERSION-x64.zip.blockmap \
+  release/latest-mac.yml \
+  --repo "$REPO" --clobber
 
 echo "✓ Release complete"

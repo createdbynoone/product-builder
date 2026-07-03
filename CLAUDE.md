@@ -68,10 +68,11 @@ Finish: `finished | completed | succeeded` · Error: `failed | error`
 ## Release workflow
 
 1. Bump `version` en `package.json`
-2. Commit + push a `main`
-3. `git tag vX.Y.Z && git push origin vX.Y.Z` (el tag debe existir en el remoto antes de publicar — electron-builder 26 lo exige)
-4. `GH_TOKEN=$(gh auth token) bash scripts/publish.sh` — build arm64 y x64 **secuencial** (evita mismatch de sha512 por firma paralela)
-5. Verificar `latest-mac.yml` del release: version correcta, sha512 coincide con el zip local, tamaños coinciden con los assets subidos
+2. Commit + push a `master` (la rama es `master`, no main)
+3. `git tag vX.Y.Z && git push origin vX.Y.Z`
+4. `bash scripts/publish.sh` — construye con `electron-builder --mac --publish never` (una sola invocación, ambas arquitecturas), auto-verifica sha512 del `latest-mac.yml` vs zips locales, y sube los 9 assets con `gh release upload --clobber`. **NO usar el publisher de GitHub de electron-builder** (`--publish always`): corre tasks de publish duplicados que se sobreescriben entre sí y dejan los assets inconsistentes con el yml. Tampoco correr el builder una vez por arch: `package.json` declara `arch:["arm64","x64"]` en los targets, así que `--arm64`/`--x64` no filtran — dos pasadas = dos builds con firma ad-hoc distinta mezclados en GitHub
+5. Verificar el release: `gh api repos/createdbynoone/product-builder/releases/tags/vX.Y.Z --jq '.assets[] | "\(.name) \(.digest)"'` vs `openssl dgst -sha256` local — deben coincidir los 9 assets
+6. Si el publish falla a medias: borrar TODOS los assets del release (`gh release delete-asset ... --yes`) y re-correr publish.sh limpio
 
 ## Pendiente
 
