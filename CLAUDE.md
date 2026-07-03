@@ -106,12 +106,16 @@ Finish: `finished | completed | succeeded` · Error: `failed | error`
 - **Release workflow reescrito** tras 3 publishes inconsistentes de v1.1.0: el publisher GitHub de electron-builder corre tasks duplicados que se pisan entre sí. Ahora `publish.sh` = build `--publish never` + verificación sha512 + `gh release upload`. Además el disco Sandisk se desconectó a mitad de un publish (ENOENT en todo, `release/` desapareció) — si pasan cosas imposibles a mitad de build, verificar que el volumen siga montado
 - v1.1.0 publicado y verificado: los 9 assets con sha256 idéntico local vs GitHub
 
-### 2026-07-03 — Modo Technical (dev)
-- Nuevo modo Technical: dibujos técnicos de prendas. v1: Recraft V4.1 Vector (SVG) — descartado, resultados no esperados (proporciones inventadas). v2: **Nano Banana 2 edit via POYO** — probado contra la API real con un tee oversized: proporciones fieles, costuras de panel presentes, rib con líneas, topstitch discontinuo. Ver sección "Modo Technical" arriba
-- Toggle renombrado BUILD → PRODUCT; renders arrastrables a Resources y a la referencia de Technical. En dev, sin release aún
-- Geometría CAD estricta en Technical (feedback: trazos "en rizo" → rectas a regla)
-- **Modo Enhance añadido** (ver sección arriba) — probado end-to-end con el tee Aurora Borealis via POYO real
+### 2026-07-03 — Modos Technical + Enhance (dev, pendiente release)
+- **Modo Technical**: dibujos técnicos de prendas. v1: Recraft V4.1 Vector (SVG) — descartado, resultados no esperados (proporciones inventadas, i2i alucinaba). v2: **Nano Banana 2 edit via POYO** — probado contra la API real con un tee oversized: proporciones fieles, costuras de panel presentes, rib con líneas, topstitch discontinuo. Ver sección "Modo Technical" arriba
+- Toggle renombrado BUILD → PRODUCT (3 modos: PRODUCT | TECHNICAL | ENHANCE); renders arrastrables a Resources y a las referencias de Technical/Enhance
+- Geometría del Technical iterada 2 veces por feedback ("trazos en rizo" → "wiggle"): la solución final fue **IDEALIZE THE GEOMETRY — DO NOT TRACE THE PHOTO** (NB2 calca la ondulación de la tela de la referencia; hay que ordenar enderezar cada borde a su forma ideal de patrón, un segmento vectorial por borde). Pedir solo "líneas rectas" NO basta
+- **Modo Enhance añadido** (destilado de la skill Enhance-Brotherhood, ver sección arriba) — probado end-to-end con el tee Aurora Borealis via POYO real
+- Enhance iterado por feedback: NB2 deformaba textos pequeños ("SIGNATURE"→"SKEHATURE"). Fix validado: Claude transcribe cada texto del mockup **verbatim** en el prompt + TEXT FIDELITY absolute + DESIGN/SILHOUETTE LOCK (el edit solo toca materiales/textura/luz)
+- Claude de la app (Polish + Enhance compose) cambiado de `claude-opus-4-8` a **`claude-sonnet-5`**
+- Renders de prueba de la sesión en Desktop: `pb_tech_test_back/straight/vector.png`, `pb_enh_test_aurora(_strict).png`
+- **Pendiente:** release vX.Y.0 con los 3 modos cuando el usuario valide en dev (bump version + publish.sh)
 
 ## Pendiente
 
-- Ninguno crítico
+- Release con los 3 modos (Product/Technical/Enhance) cuando se validen en dev
