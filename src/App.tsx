@@ -189,7 +189,7 @@ export default function App() {
                 mode === m ? 'bg-accent/15 text-accent' : 'text-text-secondary hover:text-text-primary'
               } ${building ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              {m}
+              {m === 'product' ? 'build' : m}
             </button>
           ))}
         </div>
