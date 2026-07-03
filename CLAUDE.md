@@ -114,6 +114,7 @@ Finish: `finished | completed | succeeded` · Error: `failed | error`
 - Enhance iterado por feedback: NB2 deformaba textos pequeños ("SIGNATURE"→"SKEHATURE"). Fix validado: Claude transcribe cada texto del mockup **verbatim** en el prompt + TEXT FIDELITY absolute + DESIGN/SILHOUETTE LOCK (el edit solo toca materiales/textura/luz)
 - Claude de la app (Polish + Enhance compose) cambiado de `claude-opus-4-8` a **`claude-sonnet-5`**
 - Renders de prueba de la sesión en Desktop: `pb_tech_test_back/straight/vector.png`, `pb_enh_test_aurora(_strict).png`
+- **Shift+hover en el strip de sesión** → overlay oscuro + ícono papelera; shift+click mueve el archivo a la Papelera de macOS via `shell.trashItem` (IPC `trash-render`, solo paths de `sessionRenders`, sin diálogos de permiso) y lo quita de la sesión
 - **Pendiente:** release vX.Y.0 con los 3 modos cuando el usuario valide en dev (bump version + publish.sh)
 
 ## Pendiente
