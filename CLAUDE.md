@@ -115,6 +115,7 @@ Finish: `finished | completed | succeeded` · Error: `failed | error`
 - Claude de la app (Polish + Enhance compose) cambiado de `claude-opus-4-8` a **`claude-sonnet-5`**
 - Renders de prueba de la sesión en Desktop: `pb_tech_test_back/straight/vector.png`, `pb_enh_test_aurora(_strict).png`
 - **Shift+hover en el strip de sesión** → overlay oscuro + ícono papelera; shift+click mueve el archivo a la Papelera de macOS via `shell.trashItem` (IPC `trash-render`, solo paths de `sessionRenders`, sin diálogos de permiso) y lo quita de la sesión
+- **Handle de resize** (puntos de agarre) entre el panel central y el Preview: drag redimensiona por DOM directo (cero re-renders durante el drag), clamp 280px–60vw, persiste en `localStorage` (`pb-preview-width`), doble click resetea a 340px. Etiqueta del toggle: PRODUCT → BUILD (el modo interno sigue siendo `product`)
 - **Pendiente:** release vX.Y.0 con los 3 modos cuando el usuario valide en dev (bump version + publish.sh)
 
 ## Pendiente
