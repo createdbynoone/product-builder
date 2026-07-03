@@ -74,6 +74,14 @@ Finish: `finished | completed | succeeded` · Error: `failed | error`
 5. Verificar el release: `gh api repos/createdbynoone/product-builder/releases/tags/vX.Y.Z --jq '.assets[] | "\(.name) \(.digest)"'` vs `openssl dgst -sha256` local — deben coincidir los 9 assets
 6. Si el publish falla a medias: borrar TODOS los assets del release (`gh release delete-asset ... --yes`) y re-correr publish.sh limpio
 
+## Historial de sesiones
+
+### 2026-07-02/03 — v1.0.1 + v1.1.0
+- **v1.0.1:** `pollPOYOTask` muestra el `error_message` real de POYO en generaciones fallidas (antes solo "Generation failed" genérico). Diagnóstico de outage: POYO cayó ~6h con `"Server exception, please try again later"` en TODAS las generaciones (incluso prompts triviales) — no era bug de la app. Se recuperó solo; ambos modelos (`nano-banana-2` y `-edit`) verificados OK después
+- **v1.1.0:** (1) UpdateBar con inset izquierdo 92px — antes los semáforos de macOS chocaban con su contenido (la barra se monta ARRIBA del titlebar, así que los semáforos caen sobre esa fila); (2) fallback automático a Higgsfield cuando POYO falla (ver Flujo de build #6). Comando fallback probado end-to-end contra Higgsfield real
+- **Release workflow reescrito** tras 3 publishes inconsistentes de v1.1.0: el publisher GitHub de electron-builder corre tasks duplicados que se pisan entre sí. Ahora `publish.sh` = build `--publish never` + verificación sha512 + `gh release upload`. Además el disco Sandisk se desconectó a mitad de un publish (ENOENT en todo, `release/` desapareció) — si pasan cosas imposibles a mitad de build, verificar que el volumen siga montado
+- v1.1.0 publicado y verificado: los 9 assets con sha256 idéntico local vs GitHub
+
 ## Pendiente
 
-- Ninguno crítico — listo para primer release
+- Ninguno crítico
