@@ -225,7 +225,7 @@ ipcMain.handle('polish-prompt', async (_event, { prompt, resources }: { prompt: 
   ]
 
   const message = await anthropic.messages.create({
-    model: 'claude-opus-4-8',
+    model: 'claude-sonnet-5',
     max_tokens: 1024,
     system: POLISH_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userContent }],
@@ -622,7 +622,7 @@ async function composeEnhancePrompt(imagePath: string, notes: string, view: stri
   const encoded = resizeAndEncode(imagePath)
   if (!encoded) return composeEnhanceFallbackPrompt(view, notes)
   const message = await anthropic.messages.create({
-    model: 'claude-opus-4-8',
+    model: 'claude-sonnet-5',
     max_tokens: 1024,
     system: ENHANCE_SYSTEM_PROMPT,
     messages: [{

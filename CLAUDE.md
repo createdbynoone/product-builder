@@ -10,7 +10,7 @@ Electron app para **creación de producto** (no marketing): combina recursos eti
 ## Stack
 
 - Electron 43 + electron-vite 5 + vite 7 + React 18 + TypeScript + Tailwind
-- @anthropic-ai/sdk 0.109+ — `claude-opus-4-8` para pulir prompts
+- @anthropic-ai/sdk 0.109+ — `claude-sonnet-5` para pulir prompts
 - **Electron 32+ eliminó `File.path`** — drag & drop via `webUtils.getPathForFile` (`window.pb.getPathForFile`)
 - zoomFactor 1.1 (+10% UI, webPreferences + did-finish-load); will-navigate prevented + setWindowOpenHandler deny
 - Preload MUST ser CommonJS (`.cjs`) — `sandbox:true` + ES module preload falla silenciosamente
@@ -49,7 +49,7 @@ Toggle `PRODUCT | TECHNICAL` en el titlebar. Genera dibujos técnicos planos de 
 
 Tercer modo del toggle (`PRODUCT | TECHNICAL | ENHANCE`). Convierte un mockup/flat en un shot fotoreal e-commerce con tacto y textura final, siempre **4:5 · 2K**. Destilado de la skill **Enhance-Brotherhood**.
 
-- **Pipeline:** referencia (obligatoria) + notas básicas de materiales → Claude (`claude-opus-4-8`, `ENHANCE_SYSTEM_PROMPT`) expande las notas en el prompt NB2 final usando el vocabulario de técnicas de la marca → sube a POYO → `nano-banana-2-edit`. Sin ANTHROPIC key o si Claude falla: `composeEnhanceFallbackPrompt` (template fijo + notas crudas). Fallback Higgsfield igual que los otros modos (prefix `pb_enh`)
+- **Pipeline:** referencia (obligatoria) + notas básicas de materiales → Claude (`claude-sonnet-5`, `ENHANCE_SYSTEM_PROMPT`) expande las notas en el prompt NB2 final usando el vocabulario de técnicas de la marca → sube a POYO → `nano-banana-2-edit`. Sin ANTHROPIC key o si Claude falla: `composeEnhanceFallbackPrompt` (template fijo + notas crudas). Fallback Higgsfield igual que los otros modos (prefix `pb_enh`)
 - **Vocabulario de técnicas (en el system prompt):** serigrafía relieve/puff (2–3mm), alta densidad (1.5–2mm bordes 90°), plana, sublimado (default tone-on-tone), laser, trazo, bordado acolchado, vintage, golpes de costura FUERTES (halo 3–5cm) / LEVES (≤6–8mm), foto PANEL/BLEED
 - **Estándares globales no negociables (de la skill):** sin sombra de contacto, fondo seamless `#ededed` perfectamente uniforme, arrugas casi cero (pressed crisp), lenguaje ultra-premium (haute-couture), softbox ~5500K, materiales legibles como superficies distintas
 - **Reglas:** NUNCA añadir componentes no visibles en la referencia; vista BACK sin el tag lateral metálico; presentación por categoría (ghost mannequin tops / flat-lay pants / head-form gorras); materiales por categoría (tees 280–320gsm jersey, hoodies 380–450gsm fleece, jeans 12–14oz, gorras twill)
@@ -57,7 +57,7 @@ Tercer modo del toggle (`PRODUCT | TECHNICAL | ENHANCE`). Convierte un mockup/fl
 
 ## Claude polish (opcional)
 
-- IPC `polish-prompt` — envía draft + recursos (como `@ImageN:` + imagen) a `claude-opus-4-8`
+- IPC `polish-prompt` — envía draft + recursos (como `@ImageN:` + imagen) a `claude-sonnet-5`
 - System prompt: visualización de diseño de producto, fotografía de estudio (seamless bg, softbox), PRESERVA los tags `@ImageN` exactos, español→inglés, NO marketing/lifestyle/modelos
 - Cooldown 4s; max 8000 chars
 
