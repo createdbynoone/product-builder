@@ -472,6 +472,12 @@ function composeTechnicalPrompt(view: string, notes: string, hasReference: boole
     canvas_ratio: '4:5',
     background: '#FFFFFF',
     stroke: { color: '#000000', weight_pt: 2, uniformity: 'all_lines_identical', no_taper: true },
+    line_geometry: {
+      style: 'ruler_straight_cad_precision',
+      straight_edges: 'perfectly_straight',
+      allowed_curves: 'necklines_armholes_cap_crown_visor_only_smooth_arcs',
+      wavy_lines: 'forbidden',
+    },
     stitching: { style: 'dashed_line', weight_pt: 2 },
     rib_bands: { style: 'evenly_spaced_vertical_tick_lines' },
     wrinkles: 'none',
@@ -489,6 +495,7 @@ function composeTechnicalPrompt(view: string, notes: string, hasReference: boole
   return (
     `Technical fashion flat drawing. Vector illustration style. Adobe Illustrator flat design. NOT a photograph. NOT photorealistic. NOT a 3D render.\n\n` +
     `${subject}${extraNotes}\n\n` +
+    `LINE GEOMETRY — CAD PRECISION, STRICTLY STRAIGHT: every line is drawn as in vector CAD software using a ruler; side seams, sleeve hems, bottom hem, shoulder lines, waistbands and all straight edges are PERFECTLY STRAIGHT rigid lines meeting at crisp corners; hems are perfectly straight horizontal lines; NO wavy lines, NO undulating or rippling edges, NO organic hand-drawn curves, NO fabric-like softness in any contour; curves appear ONLY where the sewing pattern truly curves — necklines, armholes, cap crowns, visor edges — and those are smooth geometric arcs.\n\n` +
     `STRICT RENDERING RULES: pure black line art on a plain white background; every single line — outer silhouette, panel seams and internal construction alike — at the exact same uniform 2pt solid black stroke weight, zero variation, no tapering; ALL stitching and topstitch lines drawn as fine dashed lines; any ribbed band (collar, cuffs, waistband) drawn with evenly-spaced short vertical rib lines; construction elements included as clean line work when present: pockets, belt loops, fly and plackets, drawcords and tips, waistband, cap panels and eyelets, visor, closures, buttons, zippers — hardware in outline only; item surface completely blank — NO prints, NO logos, NO graphics; perfectly clean and technical — NO wrinkles, NO drape or fold marks, NO extra strokes, NO shading, NO fills, NO gradients, NO text, NO labels. Ghost flat presentation, symmetric where the item is symmetric, centered with even margins.\n\n` +
     JSON.stringify(params)
   )
