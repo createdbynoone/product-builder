@@ -45,6 +45,16 @@ Toggle `PRODUCT | TECHNICAL` en el titlebar. Genera dibujos técnicos planos de 
 - Output: `pb_tech_<timestamp>.png` en outputPath, registrado en `sessionRenders`
 - Los renders (Product y Technical) se pueden **arrastrar** al panel Resources (mime interno `application/x-pb-render`) y a la zona de referencia de Technical
 
+## Modo Enhance (mockup → fotoreal, Nano Banana 2 via POYO)
+
+Tercer modo del toggle (`PRODUCT | TECHNICAL | ENHANCE`). Convierte un mockup/flat en un shot fotoreal e-commerce con tacto y textura final, siempre **4:5 · 2K**. Destilado de la skill **Enhance-Brotherhood**.
+
+- **Pipeline:** referencia (obligatoria) + notas básicas de materiales → Claude (`claude-opus-4-8`, `ENHANCE_SYSTEM_PROMPT`) expande las notas en el prompt NB2 final usando el vocabulario de técnicas de la marca → sube a POYO → `nano-banana-2-edit`. Sin ANTHROPIC key o si Claude falla: `composeEnhanceFallbackPrompt` (template fijo + notas crudas). Fallback Higgsfield igual que los otros modos (prefix `pb_enh`)
+- **Vocabulario de técnicas (en el system prompt):** serigrafía relieve/puff (2–3mm), alta densidad (1.5–2mm bordes 90°), plana, sublimado (default tone-on-tone), laser, trazo, bordado acolchado, vintage, golpes de costura FUERTES (halo 3–5cm) / LEVES (≤6–8mm), foto PANEL/BLEED
+- **Estándares globales no negociables (de la skill):** sin sombra de contacto, fondo seamless `#ededed` perfectamente uniforme, arrugas casi cero (pressed crisp), lenguaje ultra-premium (haute-couture), softbox ~5500K, materiales legibles como superficies distintas
+- **Reglas:** NUNCA añadir componentes no visibles en la referencia; vista BACK sin el tag lateral metálico; presentación por categoría (ghost mannequin tops / flat-lay pants / head-form gorras); materiales por categoría (tees 280–320gsm jersey, hoodies 380–450gsm fleece, jeans 12–14oz, gorras twill)
+- Output: `pb_enh_<timestamp>.png` en outputPath, registrado en `sessionRenders`. Probado end-to-end con el tee Aurora Borealis: texturas fieles, gráficos preservados, bleed disolviéndose correcto
+
 ## Claude polish (opcional)
 
 - IPC `polish-prompt` — envía draft + recursos (como `@ImageN:` + imagen) a `claude-opus-4-8`
@@ -99,6 +109,8 @@ Finish: `finished | completed | succeeded` · Error: `failed | error`
 ### 2026-07-03 — Modo Technical (dev)
 - Nuevo modo Technical: dibujos técnicos de prendas. v1: Recraft V4.1 Vector (SVG) — descartado, resultados no esperados (proporciones inventadas). v2: **Nano Banana 2 edit via POYO** — probado contra la API real con un tee oversized: proporciones fieles, costuras de panel presentes, rib con líneas, topstitch discontinuo. Ver sección "Modo Technical" arriba
 - Toggle renombrado BUILD → PRODUCT; renders arrastrables a Resources y a la referencia de Technical. En dev, sin release aún
+- Geometría CAD estricta en Technical (feedback: trazos "en rizo" → rectas a regla)
+- **Modo Enhance añadido** (ver sección arriba) — probado end-to-end con el tee Aurora Borealis via POYO real
 
 ## Pendiente
 
