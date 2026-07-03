@@ -32,6 +32,46 @@ export default function App() {
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // Preview panel resize — width lives in a ref and is applied via direct DOM
+  // style during drag (zero React re-renders); persisted on release
+  const DEFAULT_PREVIEW_WIDTH = 340
+  const previewPanelRef = useRef<HTMLDivElement>(null)
+  const previewWidthRef = useRef<number>((() => {
+    const saved = parseInt(localStorage.getItem('pb-preview-width') ?? '', 10)
+    return Number.isFinite(saved) ? saved : DEFAULT_PREVIEW_WIDTH
+  })())
+
+  const clampPreviewWidth = (w: number) =>
+    Math.min(Math.max(w, 280), Math.round(window.innerWidth * 0.6))
+
+  const startPreviewResize = useCallback((e: React.PointerEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = previewPanelRef.current?.offsetWidth ?? previewWidthRef.current
+    const onMove = (ev: PointerEvent) => {
+      const w = clampPreviewWidth(startW + (startX - ev.clientX))
+      previewWidthRef.current = w
+      if (previewPanelRef.current) previewPanelRef.current.style.width = `${w}px`
+    }
+    const onUp = () => {
+      localStorage.setItem('pb-preview-width', String(previewWidthRef.current))
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }, [])
+
+  const resetPreviewWidth = useCallback(() => {
+    previewWidthRef.current = DEFAULT_PREVIEW_WIDTH
+    if (previewPanelRef.current) previewPanelRef.current.style.width = `${DEFAULT_PREVIEW_WIDTH}px`
+    localStorage.setItem('pb-preview-width', String(DEFAULT_PREVIEW_WIDTH))
+  }, [])
+
   useEffect(() => {
     window.pb.getVersion().then(setVersion).catch(() => {})
     window.pb.getOutputPath().then(setOutputPath).catch(() => {})
@@ -287,8 +327,22 @@ export default function App() {
           )}
         </div>
 
+        {/* Resize handle — drag to widen the preview zone; double-click resets */}
+        <div
+          onPointerDown={startPreviewResize}
+          onDoubleClick={resetPreviewWidth}
+          title="Arrastra para redimensionar el preview · doble click resetea"
+          className="w-[9px] flex-shrink-0 cursor-col-resize group flex items-center justify-center hover:bg-accent/[0.06] active:bg-accent/10 transition-colors"
+        >
+          <div className="flex flex-col gap-[3px]">
+            {[0, 1, 2].map((i) => (
+              <span key={i} className="w-[3px] h-[3px] rounded-full bg-text-muted/50 group-hover:bg-accent/80 transition-colors" />
+            ))}
+          </div>
+        </div>
+
         {/* Right — preview + session history */}
-        <div className="w-[340px] flex-shrink-0">
+        <div ref={previewPanelRef} className="flex-shrink-0" style={{ width: previewWidthRef.current }}>
           <PreviewPanel
             renders={renders}
             selected={selected}
