@@ -110,7 +110,7 @@ export default function App() {
     try {
       const res = await window.pb.fireTechnical({ imagePath: techReference, notes: techNotes, view: techView })
       if (res.success && res.outputPath) {
-        const render: Render = { path: res.outputPath, timestamp: Date.now(), aspectRatio: '4:5', resolution: 'svg' }
+        const render: Render = { path: res.outputPath, timestamp: Date.now(), aspectRatio: '4:5', resolution: '2k' }
         setRenders((prev) => [...prev, render])
         setSelected(render)
       } else if (res.error) {

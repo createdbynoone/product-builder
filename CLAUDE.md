@@ -32,15 +32,16 @@ Electron app para **creación de producto** (no marketing): combina recursos eti
 5. El render se registra en `sessionRenders` (Set) — `reveal-render` solo actúa sobre paths de esa sesión
 6. **Fallback Higgsfield (v1.1.0):** si POYO falla en cualquier punto (upload, submit, poll o sin imagen), `fallbackToHiggsfield` muestra el diagnóstico (`POYO failed: <error_message>`) y reintenta automáticamente via CLI `higgsfield generate create nano_banana_2` con la misma config y los recursos locales como `--image`. Mapeos (el CLI no soporta todo): `3:4 → 4:5`, `4K → 2k`. El render del fallback se guarda igual (`pb_<timestamp>.<ext>`, sessionRenders)
 
-## Modo Technical (Recraft V4.1 Vector)
+## Modo Technical (Nano Banana 2 via POYO)
 
-Toggle `BUILD | TECHNICAL` en el titlebar. Genera dibujos técnicos planos de prendas (flat drawings) como **SVG vectorial editable**, siempre en lienzo **4:5**.
+Toggle `PRODUCT | TECHNICAL` en el titlebar. Genera dibujos técnicos planos de prendas (flat drawings) en PNG, siempre lienzo **4:5 · 2K**.
 
-- **Pipeline de 2 etapas:** (1) el usuario suelta una imagen de referencia (foto real o mockup) → Claude (`claude-opus-4-8`) la analiza y escribe la descripción con proporciones coherentes a la imagen, ignorando gráficos/arrugas; (2) `composeTechnicalPrompt` arma el prompt final con el bloque JSON fijo de estilo y dispara a Recraft. Sin referencia, las notas del usuario actúan como descripción directa
-- **Contrato de estilo fijo (JSON en el prompt):** trazos 2pt negros uniformes (todas las líneas idénticas), costuras/topstitch como línea discontinua, ribs (cuello/puños) con líneas verticales equiespaciadas, sin arrugas ni trazos extra, sin fills/sombras/texto/gráficos, ghost flat centrado, fondo blanco
-- **API Recraft:** `POST https://external.api.recraft.ai/v1/images/generations` con `model: recraftv4_1_vector`, `style: vector_illustration`, `size: "4:5"`, `response_format: url`. OJO: V4.1 Vector NO soporta `substyle`, `negative_prompt`, `controls.no_text` ni tamaños en píxeles tipo `1024x1280` — solo aspect strings (`"4:5"`). Devuelve URL a SVG (~80 créditos/gen)
-- **i2i descartado:** `/v1/images/imageToImage` con el modelo vector alucina (strength 0.35 convirtió un tee en puffer) — por eso el análisis Claude + text-to-image
-- Output: `pb_tech_<timestamp>.svg` en outputPath, registrado en `sessionRenders`
+- **Pipeline:** referencia (foto real o mockup) → sube a POYO → `nano-banana-2-edit` con `composeTechnicalPrompt` (sin referencia: `nano-banana-2` con las notas como descripción). NB2 ve la imagen directamente, por eso las proporciones y costuras salen fieles. Fallback automático a Higgsfield CLI `nano_banana_2` si POYO falla (mismo patrón que Product, prefix `pb_tech`)
+- **Contrato de estilo fijo (bloque JSON en el prompt):** trazos 2pt negros uniformes (todas las líneas idénticas), costuras/topstitch como línea discontinua, ribs (cuello/puños) con líneas verticales equiespaciadas, sin arrugas ni trazos extra, sin fills/sombras/texto/gráficos, ghost flat centrado, fondo blanco
+- **Regla NB2 (de la skill Technical-Brotherhood):** el prompt ABRE con el bloque de style-override ("Technical fashion flat drawing. Vector illustration style… NOT a photograph…") — el modelo ancla en los primeros tokens; enterrarlo después no funciona. Prompt corto + framing "like a mockup template" para limpiar gráficos
+- **Historia:** primero se implementó con Recraft V4.1 Vector (SVG editable) — text-to-image daba flats limpios pero proporciones inventadas (dependía de descripción textual de Claude), y su imageToImage alucinaba (tee→puffer). NB2-edit resolvió ambas cosas; Recraft descartado. Si se retoma: V4.1 Vector NO soporta substyle/negative_prompt/controls/tamaños en píxeles, solo aspect strings (`"4:5"`), ~80 créditos/gen, `RECRAFT_API_KEY` sigue en `~/.productbuilder.env`
+- Output: `pb_tech_<timestamp>.png` en outputPath, registrado en `sessionRenders`
+- Los renders (Product y Technical) se pueden **arrastrar** al panel Resources (mime interno `application/x-pb-render`) y a la zona de referencia de Technical
 
 ## Claude polish (opcional)
 
@@ -94,7 +95,8 @@ Finish: `finished | completed | succeeded` · Error: `failed | error`
 - v1.1.0 publicado y verificado: los 9 assets con sha256 idéntico local vs GitHub
 
 ### 2026-07-03 — Modo Technical (dev)
-- Nuevo modo Technical: dibujos técnicos de prendas via Recraft V4.1 Vector (ver sección arriba). Probado end-to-end contra la API real: text-to-image con el bloque de estilo produce flats limpios (rib con líneas, costuras discontinuas, trazo uniforme); imageToImage con el modelo vector descartado por alucinar. En dev, sin release aún
+- Nuevo modo Technical: dibujos técnicos de prendas. v1: Recraft V4.1 Vector (SVG) — descartado, resultados no esperados (proporciones inventadas). v2: **Nano Banana 2 edit via POYO** — probado contra la API real con un tee oversized: proporciones fieles, costuras de panel presentes, rib con líneas, topstitch discontinuo. Ver sección "Modo Technical" arriba
+- Toggle renombrado BUILD → PRODUCT; renders arrastrables a Resources y a la referencia de Technical. En dev, sin release aún
 
 ## Pendiente
 

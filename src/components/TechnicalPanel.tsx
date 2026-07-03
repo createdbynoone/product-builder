@@ -76,7 +76,7 @@ export function TechnicalPanel({ reference, onReference, notes, onNotes, view, o
                 ×
               </button>
               <span className="absolute bottom-2 left-2 text-[10px] font-mono bg-black/70 text-white/70 rounded px-1.5 py-0.5">
-                referencia — Claude analiza proporciones y construcción
+                referencia — el flat respeta sus proporciones y costuras
               </span>
             </div>
           ) : (
@@ -108,7 +108,7 @@ export function TechnicalPanel({ reference, onReference, notes, onNotes, view, o
       {/* Draw bar */}
       <div className="flex items-center justify-between px-4 py-3 border-t border-border flex-shrink-0">
         <span className="text-[11px] font-mono text-text-muted">
-          4:5 · SVG vector · 2pt uniforme · costuras discontinuas
+          4:5 · 2K · trazo 2pt uniforme · costuras discontinuas
         </span>
         <button
           onClick={onDraw}
