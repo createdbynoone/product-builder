@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync, createWriteStream } from 'fs'
 import { homedir } from 'os'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { scryptSync, timingSafeEqual } from 'crypto'
 import https from 'https'
 import Anthropic from '@anthropic-ai/sdk'
 import electronUpdater from 'electron-updater'
@@ -26,6 +27,9 @@ type IconStyle = typeof ICON_STYLES[number]
 interface Prefs {
   iconStyle: IconStyle
   outputPath: string
+  unlockedAt?: string
+  authFailCount?: number
+  authLockUntil?: number
 }
 
 function prefsPath(): string {
@@ -48,6 +52,86 @@ function loadPrefs(): Prefs {
 function savePrefs(prefs: Prefs) {
   writeFileSync(prefsPath(), JSON.stringify(prefs, null, 2), 'utf-8')
 }
+
+// ─── App lock ─────────────────────────────────────────────────────────────────
+// Only the scrypt hash + salt live here — the passphrase itself is never
+// written to source or to the compiled bundle, so reading/decompiling the app
+// cannot recover it directly (only an offline brute-force against the hash).
+const LOCK_SALT_HEX = 'e9a39de261d3003cd0dc0bd05fc2af14'
+const LOCK_HASH_HEX = '532d0933d43c18a2cd225baac201976b120ecf29b08f053fde4e2a9dda89316c4f8b5b8f3bb07cf0ebc527e17af7495d8a698ec1a1db146624c35e0bbb27a825'
+const LOCK_HASH = Buffer.from(LOCK_HASH_HEX, 'hex')
+
+let unlocked = false
+
+function verifyPassphrase(attempt: string): boolean {
+  const candidate = scryptSync(attempt, Buffer.from(LOCK_SALT_HEX, 'hex'), 64)
+  return candidate.length === LOCK_HASH.length && timingSafeEqual(candidate, LOCK_HASH)
+}
+
+// Failed attempts + lockout persist across restarts (in prefs) so quitting
+// and relaunching the app can't be used to reset a brute-force cooldown.
+function currentLockout(): number {
+  return loadPrefs().authLockUntil ?? 0
+}
+
+function registerFailedAttempt(): number {
+  const prefs = loadPrefs()
+  const count = (prefs.authFailCount ?? 0) + 1
+  // Exponential backoff after the 3rd bad attempt: 5s, 10s, 20s, 40s ... capped at 5min
+  const lockUntil = count >= 3
+    ? Date.now() + Math.min(5000 * 2 ** (count - 3), 5 * 60 * 1000)
+    : 0
+  savePrefs({ ...prefs, authFailCount: count, authLockUntil: lockUntil })
+  return lockUntil
+}
+
+function clearAuthState(): void {
+  const prefs = loadPrefs()
+  savePrefs({ ...prefs, authFailCount: 0, authLockUntil: 0, unlockedAt: new Date().toISOString() })
+}
+
+function requireUnlocked(): void {
+  if (!unlocked) throw new Error('Locked')
+}
+
+// Every handler below requires the passphrase to have been entered once on
+// this machine — without this, a renderer that skips the LockScreen UI
+// (e.g. via devtools) still can't reach the filesystem or the Anthropic/POYO keys.
+function handleWhenUnlocked<Args extends unknown[], R>(
+  channel: string,
+  fn: (event: Electron.IpcMainInvokeEvent, ...args: Args) => R,
+): void {
+  ipcMain.handle(channel, (event, ...args: Args) => {
+    requireUnlocked()
+    return fn(event, ...args)
+  })
+}
+
+ipcMain.handle('auth:status', () => ({
+  locked: !unlocked,
+  lockUntil: currentLockout(),
+}))
+
+ipcMain.handle('auth:unlock', (_e, attempt: unknown) => {
+  const lockUntil = currentLockout()
+  if (Date.now() < lockUntil) return { ok: false, lockUntil }
+  if (typeof attempt !== 'string' || !verifyPassphrase(attempt)) {
+    return { ok: false, lockUntil: registerFailedAttempt() }
+  }
+  clearAuthState()
+  unlocked = true
+  return { ok: true, lockUntil: 0 }
+})
+
+// Paths the renderer is legitimately allowed to preview via localfile:// —
+// resolved either from a real Finder drag (preload's getPathForFile wrapper
+// registers it here) or a render this session produced. Without this the
+// protocol handler below would serve ANY path on disk with no restriction.
+const knownLocalPaths = new Set<string>()
+ipcMain.on('register-known-path', (event, path: unknown) => {
+  if (typeof path === 'string' && path) knownLocalPaths.add(path)
+  event.returnValue = true
+})
 
 function getIconPath(styleName: string): string {
   const filename = `Icon-macOS-${styleName}-1024@1x.png`
@@ -195,7 +279,7 @@ function resizeAndEncode(p: string): { b64: string; mediaType: Anthropic.Base64I
 const POLISH_COOLDOWN_MS = 4000
 let lastPolishTime = 0
 
-ipcMain.handle('polish-prompt', async (_event, { prompt, resources }: { prompt: string; resources: string[] }) => {
+handleWhenUnlocked('polish-prompt', async (_event, { prompt, resources }: { prompt: string; resources: string[] }) => {
   const now = Date.now()
   if (now - lastPolishTime < POLISH_COOLDOWN_MS) {
     const wait = Math.ceil((POLISH_COOLDOWN_MS - (now - lastPolishTime)) / 1000)
@@ -386,7 +470,7 @@ async function buildViaHiggsfield(
   }
 }
 
-ipcMain.handle('fire-build', async (event, { prompt, resources, aspectRatio, resolution }: {
+handleWhenUnlocked('fire-build', async (event, { prompt, resources, aspectRatio, resolution }: {
   prompt: string; resources: string[]; aspectRatio: string; resolution: string
 }) => {
   if (typeof prompt !== 'string' || prompt.trim().length === 0 || prompt.length > 12000) {
@@ -504,7 +588,7 @@ function composeTechnicalPrompt(view: string, notes: string, hasReference: boole
   )
 }
 
-ipcMain.handle('fire-technical', async (event, { imagePath, notes, view }: {
+handleWhenUnlocked('fire-technical', async (event, { imagePath, notes, view }: {
   imagePath: string | null; notes: string; view: string
 }) => {
   if (!TECHNICAL_VIEWS.includes(view as typeof TECHNICAL_VIEWS[number])) throw new Error('Invalid view')
@@ -708,7 +792,7 @@ async function runEnhanceGeneration(
   }
 }
 
-ipcMain.handle('fire-enhance', async (event, { frontPath, backPath, notes }: {
+handleWhenUnlocked('fire-enhance', async (event, { frontPath, backPath, notes }: {
   frontPath: string | null; backPath: string | null; notes: string
 }) => {
   if (typeof notes !== 'string' || notes.length > 4000) throw new Error('Invalid notes')
@@ -755,13 +839,13 @@ ipcMain.handle('fire-enhance', async (event, { frontPath, backPath, notes }: {
   }
 })
 
-ipcMain.handle('reveal-render', (_event, path: string) => {
+handleWhenUnlocked('reveal-render', (_event, path: string) => {
   if (typeof path !== 'string' || !sessionRenders.has(path)) throw new Error('Unknown render path')
   shell.showItemInFolder(path)
 })
 
 // Move a session render to the macOS Trash (no permission dialogs)
-ipcMain.handle('trash-render', async (_event, path: string) => {
+handleWhenUnlocked('trash-render', async (_event, path: string) => {
   if (typeof path !== 'string' || !sessionRenders.has(path)) throw new Error('Unknown render path')
   await shell.trashItem(path)
   sessionRenders.delete(path)
@@ -769,16 +853,16 @@ ipcMain.handle('trash-render', async (_event, path: string) => {
 
 // ─── Misc IPC ─────────────────────────────────────────────────────────────────
 
-ipcMain.handle('get-version', () => app.getVersion())
+handleWhenUnlocked('get-version', () => app.getVersion())
 
-ipcMain.handle('get-output-path', () => loadPrefs().outputPath)
+handleWhenUnlocked('get-output-path', () => loadPrefs().outputPath)
 
-ipcMain.handle('set-output-path', (_event, path: string) => {
+handleWhenUnlocked('set-output-path', (_event, path: string) => {
   if (typeof path !== 'string' || path.length === 0) throw new Error('Invalid path')
   savePrefs({ ...loadPrefs(), outputPath: path })
 })
 
-ipcMain.handle('open-folder-dialog', async () => {
+handleWhenUnlocked('open-folder-dialog', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory', 'createDirectory'],
     title: 'Choose output folder',
@@ -910,8 +994,15 @@ protocol.registerSchemesAsPrivileged([
 app.whenReady().then(() => {
   protocol.handle('localfile', (request) => {
     const filePath = decodeURIComponent(request.url.slice('localfile://'.length))
+    // Only serve paths the renderer legitimately resolved (a real Finder drag
+    // via getPathForFile, or a render this session produced) and only once
+    // unlocked — otherwise ANY path on disk would be readable through this scheme.
+    if (!unlocked || (!knownLocalPaths.has(filePath) && !sessionRenders.has(filePath))) {
+      return new Response('Forbidden', { status: 403 })
+    }
     return net.fetch(`file://${filePath}`)
   })
+  unlocked = Boolean(loadPrefs().unlockedAt)
   buildAppMenu()
   const win = createWindow()
   setupAutoUpdater(win)

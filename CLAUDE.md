@@ -4,8 +4,15 @@ Electron app para **creación de producto** (no marketing): combina recursos eti
 
 **Dev:** `npm run dev` (puerto 5275)
 **Typecheck:** `npm run typecheck`
-**Versión actual:** 1.2.0
+**Versión actual:** 1.3.0
 **GitHub:** `createdbynoone/product-builder`
+
+## Lock screen + seguridad (v1.3.0, 2026-07-07)
+- Primer arranque en una máquina pide passphrase (`brother*1998_hood`, mismo patrón que Brotherhood Canvas/Sorter) antes de tocar filesystem/API keys — scrypt hash+salt propios en `main.ts`, nunca el texto plano; `timingSafeEqual`; backoff exponencial persistido en `pb-prefs.json`
+- `handleWhenUnlocked()` gatea todos los IPC (`polish-prompt`, `fire-build`, `fire-technical`, `fire-enhance`, `reveal-render`, `trash-render`, `get-output-path`, etc.) — el backend rechaza aunque alguien salte el `LockScreen.tsx` de la UI
+- **Vulnerabilidad real corregida**: el protocolo `localfile://` hacía `net.fetch('file://' + path)` con CUALQUIER path, sin restricción. Ahora `knownLocalPaths` (Set poblado por el wrapper de `getPathForFile` en preload — cada path que el renderer resuelve de un drag de Finder se registra ahí) + `sessionRenders` son los únicos paths servibles, y solo si `unlocked`
+- CSP agregado a `index.html` (no existía)
+- Para regenerar el hash si cambia la clave: `node -e "const c=require('crypto');const s=c.randomBytes(16);console.log(s.toString('hex'), c.scryptSync('NUEVA_CLAVE',s,64).toString('hex'))"` y reemplazar `LOCK_SALT_HEX`/`LOCK_HASH_HEX`
 
 ## Stack
 

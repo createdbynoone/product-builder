@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react'
+import LockScreen from './components/LockScreen'
 import { ResourcePanel } from './components/ResourcePanel'
 import { PromptPanel } from './components/PromptPanel'
 import { PreviewPanel, Render } from './components/PreviewPanel'
@@ -29,6 +30,16 @@ export default function App() {
   const [version, setVersion] = useState('')
   const [outputPath, setOutputPath] = useState('')
   const [error, setError] = useState('')
+
+  const [authState, setAuthState] = useState<'checking' | 'locked' | 'unlocked'>('checking')
+  const [lockUntil, setLockUntil] = useState(0)
+
+  useEffect(() => {
+    window.pb.auth.status().then(res => {
+      if (res.locked) { setLockUntil(res.lockUntil); setAuthState('locked') }
+      else setAuthState('unlocked')
+    })
+  }, [])
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -73,13 +84,14 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (authState !== 'unlocked') return
     window.pb.getVersion().then(setVersion).catch(() => {})
     window.pb.getOutputPath().then(setOutputPath).catch(() => {})
     const off = window.pb.onProgress((line) => {
       setProgress((prev) => [...prev.slice(-40), line])
     })
     return off
-  }, [])
+  }, [authState])
 
   // @Image indices referenced in the prompt (0-based)
   const usedIndices = useMemo(() => {
@@ -209,6 +221,12 @@ export default function App() {
   }, [])
 
   const outputLabel = outputPath.split('/').filter(Boolean).pop() ?? ''
+
+  if (authState === 'checking') return null
+
+  if (authState === 'locked') {
+    return <LockScreen initialLockUntil={lockUntil} onUnlocked={() => setAuthState('unlocked')} />
+  }
 
   return (
     <div className="flex flex-col h-full">

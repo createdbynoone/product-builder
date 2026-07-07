@@ -1,5 +1,9 @@
 interface Window {
   pb: {
+    auth: {
+      status: () => Promise<{ locked: boolean; lockUntil: number }>
+      unlock: (key: string) => Promise<{ ok: boolean; lockUntil: number }>
+    }
     getPathForFile: (file: File) => string
     polishPrompt: (data: { prompt: string; resources: string[] }) => Promise<{ prompt: string }>
     fireBuild: (data: { prompt: string; resources: string[]; aspectRatio: string; resolution: string }) => Promise<{ success: boolean; outputPath: string; error?: string }>
