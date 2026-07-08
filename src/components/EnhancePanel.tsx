@@ -68,11 +68,13 @@ interface EnhancePanelProps {
   onBackRef: (path: string | null) => void
   notes: string
   onNotes: (n: string) => void
+  strictSilhouette: boolean
+  onStrictSilhouette: (v: boolean) => void
   enhancing: boolean
   onEnhance: () => void
 }
 
-export function EnhancePanel({ frontRef, onFrontRef, backRef, onBackRef, notes, onNotes, enhancing, onEnhance }: EnhancePanelProps) {
+export function EnhancePanel({ frontRef, onFrontRef, backRef, onBackRef, notes, onNotes, strictSilhouette, onStrictSilhouette, enhancing, onEnhance }: EnhancePanelProps) {
   const canEnhance = (frontRef !== null || backRef !== null) && !enhancing
 
   return (
@@ -102,6 +104,28 @@ export function EnhancePanel({ frontRef, onFrontRef, backRef, onBackRef, notes, 
             onPath={onBackRef}
           />
         </div>
+
+        {/* Strict silhouette toggle */}
+        <button
+          onClick={() => onStrictSilhouette(!strictSilhouette)}
+          className="flex items-center gap-2 flex-shrink-0 self-start group"
+          title="El corte de la referencia se respeta al 100% — solo se mejora el realismo del render"
+        >
+          <span
+            className={`w-7 h-4 rounded-full relative transition-colors duration-150 ${
+              strictSilhouette ? 'bg-accent' : 'bg-surface border border-border'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 w-3 h-3 rounded-full transition-all duration-150 ${
+                strictSilhouette ? 'left-3.5 bg-black' : 'left-0.5 bg-text-muted'
+              }`}
+            />
+          </span>
+          <span className={`text-[11px] font-heading font-semibold uppercase tracking-widest transition-colors ${strictSilhouette ? 'text-accent/90' : 'text-text-muted'}`}>
+            Strictly Silhouette
+          </span>
+        </button>
 
         <textarea
           value={notes}

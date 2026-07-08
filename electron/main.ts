@@ -7,6 +7,7 @@ import { promisify } from 'util'
 import { scryptSync, timingSafeEqual } from 'crypto'
 import https from 'https'
 import Anthropic from '@anthropic-ai/sdk'
+import { recordEvent, lessonsBlock } from './memory'
 import electronUpdater from 'electron-updater'
 const { autoUpdater } = electronUpdater
 
@@ -308,15 +309,29 @@ handleWhenUnlocked('polish-prompt', async (_event, { prompt, resources }: { prom
     { type: 'text', text: `## DRAFT PROMPT:\n${prompt}\n\nPolish it now.` },
   ]
 
-  const message = await anthropic.messages.create({
-    model: 'claude-sonnet-5',
-    max_tokens: 1024,
-    system: POLISH_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userContent }],
-  })
+  let message: Anthropic.Message
+  try {
+    message = await anthropic.messages.create({
+      model: 'claude-sonnet-5',
+      max_tokens: 4096,
+      system: POLISH_SYSTEM_PROMPT + lessonsBlock('polish'),
+      messages: [{ role: 'user', content: userContent }],
+    })
+  } catch (err) {
+    recordEvent({ mode: 'polish', kind: 'error', detail: err instanceof Error ? err.message : String(err) })
+    throw err
+  }
 
-  const block = message.content[0]
-  if (block.type !== 'text') throw new Error('Unexpected response type')
+  // Sonnet 5 runs adaptive thinking by default — thinking blocks precede the text block
+  const block = message.content.find((b): b is Anthropic.TextBlock => b.type === 'text')
+  if (!block) {
+    recordEvent({ mode: 'polish', kind: 'error', detail: 'no text block in polish response' })
+    throw new Error('Unexpected response type')
+  }
+  recordEvent({
+    mode: 'polish', kind: 'success', detail: 'prompt polished',
+    params: { draftChars: String(prompt.length), images: String(resourceImages.length) },
+  })
   return { prompt: block.text }
 })
 
@@ -607,12 +622,15 @@ handleWhenUnlocked('fire-technical', async (event, { imagePath, notes, view }: {
 
   const fallbackToHiggsfield = async (poyoError: string) => {
     sendProgress(`POYO failed: ${poyoError}`)
+    recordEvent({ mode: 'technical', kind: 'fallback', detail: `POYO → Higgsfield: ${poyoError}`, params: { view } })
     const r = await buildViaHiggsfield(prompt, resources, '4:5', '2K', outputDir, timestamp, sendProgress, 'pb_tech')
     if (!r.success) {
       const msg = `POYO: ${poyoError} · ${r.error}`
       sendProgress(`Error: ${msg}`)
+      recordEvent({ mode: 'technical', kind: 'error', detail: msg.slice(0, 400), params: { view } })
       return { success: false, outputPath: '', error: msg }
     }
+    recordEvent({ mode: 'technical', kind: 'success', detail: 'rendered via Higgsfield fallback', params: { view } })
     return r
   }
 
@@ -652,6 +670,7 @@ handleWhenUnlocked('fire-technical', async (event, { imagePath, notes, view }: {
     await downloadFile(imgFile.file_url, outputPath)
     sessionRenders.add(outputPath)
     sendProgress(`Saved: ${outputName}`)
+    recordEvent({ mode: 'technical', kind: 'success', detail: 'rendered via POYO', params: { view, hasReference: String(imagePath !== null) } })
     return { success: true, outputPath }
   } catch (err) {
     return fallbackToHiggsfield(err instanceof Error ? err.message : String(err))
@@ -685,6 +704,7 @@ PROMPT STRUCTURE:
    If notes don't specify a technique, infer the most natural one from the mockup and keep it subtle.
 4. TEXT FIDELITY — ABSOLUTE, HIGHEST PRIORITY: read EVERY text element in the reference image and TRANSCRIBE it verbatim in your prompt, quoting each line exactly (e.g. "the texts read exactly: 'brhd®', '©2060', 'BROTHERHOOD® SIGNATURE STUDIOS'"). Then order: every text is reproduced LETTER-PERFECT, character by character, same typeface, kerning and weight; do NOT redraw, reinterpret, respell or approximate any letterform; small text stays crisp, sharp and perfectly legible; zero spelling drift, zero character substitution. If you cannot read a text with certainty, describe it as "unaltered from the reference" rather than guessing letters.
 5. DESIGN AND SILHOUETTE LOCK — write this block in every prompt: the edit ONLY upgrades materials, fabric texture, lighting and photographic realism; ZERO changes to the design (graphic shapes, logo letterforms, print placement, scale, rotation, colors identical to the reference). SILHOUETTE — STRICT, NO MODIFICATIONS WHATSOEVER: the garment outline is TRACED from the reference and must match it as closely as possible — identical width-to-length proportions, shoulder drop and width, sleeve width and length, armhole depth, neckline shape and height, body taper and hem line; do NOT slim, elongate, widen, inflate, crop or restyle the garment in any way; the fit reads exactly as the reference shows it.
+5b. STRICT SILHOUETTE MODE — when the user message declares "STRICT SILHOUETTE MODE: ON", escalate the silhouette lock to ABSOLUTE: state that the reference garment outline is a HARD TEMPLATE that must be matched exactly, edge for edge — the cut, pattern, fit and proportions of the reference are NOT open to interpretation and must NOT be modified, restyled, "improved" or idealized in any way. IMPORTANT: this is NOT a flat render — the garment must still read fully THREE-DIMENSIONAL, with natural ghost-mannequin volume, rounded body and sleeves, fabric depth and soft form shading; all of that volume lives INSIDE the reference outline and never widens, slims or reshapes it. The ONLY permitted changes are fabric/material realism, print-technique rendering, 3D volume/lighting and photographic quality. Open the prompt with this constraint AND repeat it as the closing line of the prompt.
 6. NEVER add brand components not visible in the reference (tags, patches, labels). BACK view: no side-seam tag block at all.
 7. Presentation: ghost/invisible mannequin for tops with natural shoulder volume; flat-lay for pants/shorts; head-form or 3/4 angle for caps. Full garment in frame with breathing room.
 8. NON-NEGOTIABLE GLOBAL STANDARDS: garment smooth and flawless — NO creases, NO fold lines, NO wrinkles, pressed crisp as professionally styled; background seamless flat #ededed, perfectly even, NO gradient, NO contact shadow, no shadow halo — completely clean; lighting soft diffused studio softbox ~5500K, no harsh shadows, every material reading as a distinct surface (cotton weave vs ink relief vs metal); ultra-high detail, sharp fabric and thread texture, true color, commercial e-commerce quality.
@@ -693,13 +713,19 @@ You may receive ONE reference (FRONT or BACK) or BOTH. With both, output TWO coo
 
 Output ONLY the final prompt text(s), no preamble, under 350 words per prompt.`
 
-function composeEnhanceFallbackPrompt(view: string, notes: string): string {
+function composeEnhanceFallbackPrompt(view: string, notes: string, strictSilhouette: boolean): string {
   return (
+    (strictSilhouette
+      ? `STRICT SILHOUETTE: the reference garment outline is a HARD TEMPLATE — match it exactly, edge for edge; the cut, pattern, fit and proportions are NOT open to interpretation and must not be modified in any way. The garment still reads fully THREE-DIMENSIONAL — natural ghost-mannequin volume, rounded body and sleeves, fabric depth and soft form shading — but all of that volume lives INSIDE the reference outline and never reshapes it. ONLY upgrade material realism, print rendering, 3D volume/lighting and photographic quality.\n\n`
+      : '') +
     `Transform this mockup into a photorealistic e-commerce ${view} product shot of the EXACT SAME garment — preserve the silhouette, construction, proportions, and the precise placement, scale and angle of every graphic and component from the reference. Do not add any component not visible in the reference.\n\n` +
     `TEXT FIDELITY — ABSOLUTE: every text element is reproduced LETTER-PERFECT, character by character, unaltered from the reference — same typeface, kerning and weight; no redrawing, no respelling, no character substitution; small text stays crisp, sharp and perfectly legible.\n\n` +
     `DESIGN AND SILHOUETTE LOCK: this edit ONLY upgrades materials, fabric texture, lighting and photographic realism. ZERO changes to the design (graphic shapes, logo letterforms, print placement, scale, rotation, colors). SILHOUETTE — STRICT, NO MODIFICATIONS WHATSOEVER: the garment outline is traced from the reference and must match it as closely as possible — identical width-to-length proportions, shoulder drop and width, sleeve width and length, armhole depth, neckline shape and height, body taper and hem line; do NOT slim, elongate, widen, inflate, crop or restyle the garment in any way.\n\n` +
     (notes.trim() ? `MATERIALS AND TECHNIQUES: ${notes.trim()}\n\n` : '') +
-    `Ultra-premium construction: finest long-staple combed cotton with perfectly even weave, couture-level stitching with perfect tension, garment-dyed with exceptional pigment uniformity. Garment displayed smooth and flawless — NO creases, NO fold lines, NO wrinkles, pressed crisp as if professionally styled. Presentation: invisible ghost mannequin (flat-lay if pants/shorts, head-form if cap), ${view} view centered, full garment in frame with breathing room. Lighting: soft diffused studio softbox ~5500K, no harsh shadows, every material reading as a distinct tactile surface. Background: seamless flat #ededed, perfectly even, no gradient, no contact shadow, completely clean. Output: ultra-high detail, sharp fabric and thread texture, true color reproduction, commercial e-commerce product photography quality.`
+    `Ultra-premium construction: finest long-staple combed cotton with perfectly even weave, couture-level stitching with perfect tension, garment-dyed with exceptional pigment uniformity. Garment displayed smooth and flawless — NO creases, NO fold lines, NO wrinkles, pressed crisp as if professionally styled. Presentation: invisible ghost mannequin (flat-lay if pants/shorts, head-form if cap), ${view} view centered, full garment in frame with breathing room. Lighting: soft diffused studio softbox ~5500K, no harsh shadows, every material reading as a distinct tactile surface. Background: seamless flat #ededed, perfectly even, no gradient, no contact shadow, completely clean. Output: ultra-high detail, sharp fabric and thread texture, true color reproduction, commercial e-commerce product photography quality.` +
+    (strictSilhouette
+      ? `\n\nFINAL REMINDER — the garment silhouette and cut are copied exactly from the reference with zero modifications; realistic three-dimensional volume and lighting are rendered inside that exact outline.`
+      : '')
   )
 }
 
@@ -707,8 +733,8 @@ type EnhanceJob = { view: typeof ENHANCE_VIEWS[number]; path: string }
 
 // One Claude call composes all prompts — with FRONT+BACK it writes two
 // coordinated prompts sharing an identical garment-body block (skill pattern)
-async function composeEnhancePrompts(jobs: EnhanceJob[], notes: string): Promise<Record<string, string>> {
-  const fallback = () => Object.fromEntries(jobs.map((j) => [j.view, composeEnhanceFallbackPrompt(j.view, notes)]))
+async function composeEnhancePrompts(jobs: EnhanceJob[], notes: string, strictSilhouette: boolean): Promise<Record<string, string>> {
+  const fallback = () => Object.fromEntries(jobs.map((j) => [j.view, composeEnhanceFallbackPrompt(j.view, notes, strictSilhouette)]))
   if (!process.env.ANTHROPIC_API_KEY) return fallback()
 
   const encoded = jobs.map((j) => ({ job: j, enc: resizeAndEncode(j.path) }))
@@ -721,17 +747,18 @@ async function composeEnhancePrompts(jobs: EnhanceJob[], notes: string): Promise
   ])
   content.push({
     type: 'text',
-    text: `${dual ? 'VIEWS: FRONT and BACK — write the two coordinated prompts separated by the "=====BACK=====" line' : `VIEW: ${jobs[0].view}`}${notes.trim() ? `\nMATERIAL NOTES: ${notes.trim()}` : '\n(no notes — infer materials from the images)'}\n\nWrite the enhance prompt${dual ? 's' : ''} now.`,
+    text: `${dual ? 'VIEWS: FRONT and BACK — write the two coordinated prompts separated by the "=====BACK=====" line' : `VIEW: ${jobs[0].view}`}${strictSilhouette ? '\nSTRICT SILHOUETTE MODE: ON' : ''}${notes.trim() ? `\nMATERIAL NOTES: ${notes.trim()}` : '\n(no notes — infer materials from the images)'}\n\nWrite the enhance prompt${dual ? 's' : ''} now.`,
   })
 
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-5',
-    max_tokens: dual ? 2048 : 1024,
-    system: ENHANCE_SYSTEM_PROMPT,
+    max_tokens: dual ? 8192 : 4096,
+    system: ENHANCE_SYSTEM_PROMPT + lessonsBlock('enhance'),
     messages: [{ role: 'user', content }],
   })
-  const block = message.content[0]
-  if (block.type !== 'text') throw new Error('Unexpected prompt-composer response')
+  // Sonnet 5 runs adaptive thinking by default — thinking blocks precede the text block
+  const block = message.content.find((b): b is Anthropic.TextBlock => b.type === 'text')
+  if (!block) throw new Error('Unexpected prompt-composer response')
   if (!dual) return { [jobs[0].view]: block.text.trim() }
 
   const [front, back] = block.text.split('=====BACK=====')
@@ -751,6 +778,7 @@ async function runEnhanceGeneration(
 
   const fallbackToHiggsfield = async (poyoError: string) => {
     p(`POYO failed: ${poyoError}`)
+    recordEvent({ mode: 'enhance', kind: 'fallback', detail: `POYO → Higgsfield: ${poyoError}`, params: { view: job.view } })
     const r = await buildViaHiggsfield(prompt, [job.path], '4:5', '2K', outputDir, timestamp, p, filePrefix)
     if (!r.success) return { success: false, outputPath: '', error: `${tag} POYO: ${poyoError} · ${r.error}` }
     return r
@@ -792,12 +820,13 @@ async function runEnhanceGeneration(
   }
 }
 
-handleWhenUnlocked('fire-enhance', async (event, { frontPath, backPath, notes }: {
-  frontPath: string | null; backPath: string | null; notes: string
+handleWhenUnlocked('fire-enhance', async (event, { frontPath, backPath, notes, strictSilhouette }: {
+  frontPath: string | null; backPath: string | null; notes: string; strictSilhouette?: boolean
 }) => {
   if (typeof notes !== 'string' || notes.length > 4000) throw new Error('Invalid notes')
   if (frontPath !== null && typeof frontPath !== 'string') throw new Error('Invalid front path')
   if (backPath !== null && typeof backPath !== 'string') throw new Error('Invalid back path')
+  const strict = strictSilhouette !== false
 
   const jobs: EnhanceJob[] = []
   if (frontPath) jobs.push({ view: 'FRONT', path: frontPath })
@@ -814,11 +843,13 @@ handleWhenUnlocked('fire-enhance', async (event, { frontPath, backPath, notes }:
   let prompts: Record<string, string>
   try {
     sendProgress(`Composing ${jobs.length > 1 ? 'coordinated prompts' : 'enhance prompt'} with Claude...`)
-    prompts = await composeEnhancePrompts(jobs, notes)
+    prompts = await composeEnhancePrompts(jobs, notes, strict)
     sendProgress('Prompts ready ✓')
   } catch (err) {
-    sendProgress(`Claude unavailable (${err instanceof Error ? err.message : err}) — using base template`)
-    prompts = Object.fromEntries(jobs.map((j) => [j.view, composeEnhanceFallbackPrompt(j.view, notes)]))
+    const msg = err instanceof Error ? err.message : String(err)
+    sendProgress(`Claude unavailable (${msg}) — using base template`)
+    recordEvent({ mode: 'enhance', kind: 'fallback', detail: `prompt composer failed, base template used: ${msg}` })
+    prompts = Object.fromEntries(jobs.map((j) => [j.view, composeEnhanceFallbackPrompt(j.view, notes, strict)]))
   }
 
   // Fire all views in parallel (skill pattern: halves wall time for front+back)
@@ -831,6 +862,18 @@ handleWhenUnlocked('fire-enhance', async (event, { frontPath, backPath, notes }:
     .filter((o) => o.ok)
     .map(({ view, outputPath }) => ({ view, outputPath }))
   const errors = results.filter((r) => !r.success).map((r) => r.error).filter(Boolean)
+
+  const memParams = {
+    views: jobs.map((j) => j.view).join('+'),
+    strict: String(strict),
+    notes: notes.trim().slice(0, 160),
+  }
+  if (outputs.length > 0) {
+    recordEvent({ mode: 'enhance', kind: 'success', detail: `${outputs.length}/${jobs.length} views rendered`, params: memParams })
+  }
+  if (errors.length > 0) {
+    recordEvent({ mode: 'enhance', kind: 'error', detail: errors.join(' · ').slice(0, 400), params: memParams })
+  }
 
   return {
     success: outputs.length > 0,

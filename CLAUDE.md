@@ -4,7 +4,7 @@ Electron app para **creación de producto** (no marketing): combina recursos eti
 
 **Dev:** `npm run dev` (puerto 5275)
 **Typecheck:** `npm run typecheck`
-**Versión actual:** 1.3.0
+**Versión actual:** 1.4.0
 **GitHub:** `createdbynoone/product-builder`
 
 ## Lock screen + seguridad (v1.3.0, 2026-07-07)
@@ -105,7 +105,16 @@ Finish: `finished | completed | succeeded` · Error: `failed | error`
 5. Verificar el release: `gh api repos/createdbynoone/product-builder/releases/tags/vX.Y.Z --jq '.assets[] | "\(.name) \(.digest)"'` vs `openssl dgst -sha256` local — deben coincidir los 9 assets
 6. Si el publish falla a medias: borrar TODOS los assets del release (`gh release delete-asset ... --yes`) y re-correr publish.sh limpio
 
+## Memoria auto-aprendizaje (v1.4.0)
+
+`electron/memory.ts` + `pb-memory.json` en userData. Cada generación registra eventos (success/fallback/error + params) en polish, enhance y technical. Cada 10 eventos nuevos, `claude-sonnet-5` destila ≤15 lecciones `{scope, text}` (scopes: enhance/technical/polish/build/general) que se inyectan como apéndice "LEARNED LESSONS" en `POLISH_SYSTEM_PROMPT` y `ENHANCE_SYSTEM_PROMPT` via `lessonsBlock(scope)`. Todo fail-silent (la memoria nunca rompe un build), cap 300 eventos, lock anti-concurrencia, reload antes de guardar para no pisar eventos nuevos.
+
 ## Historial de sesiones
+
+### 2026-07-08 — v1.4.0: fix sonnet-5 + memoria auto-aprendizaje + Strictly Silhouette
+- **Bug "Claude unavailable (Unexpected prompt-composer response)"**: en `claude-sonnet-5` el adaptive thinking viene ON por defecto → bloques `thinking` preceden al texto en `message.content`, y el código asumía `content[0]` era texto. Fix: `content.find((b): b is Anthropic.TextBlock => b.type === 'text')` en polish, enhance composer y memory analyzer + `max_tokens` subidos (4096 single / 8192 dual) porque el thinking consume del presupuesto. Aplicar este patrón en cualquier parseo de respuestas sonnet-5
+- **Memoria auto-aprendizaje** (ver sección arriba)
+- **Toggle "STRICTLY SILHOUETTE"** en Enhance (default ON): el composer recibe `STRICT SILHOUETTE MODE: ON` (regla 5b del system prompt) y el fallback lleva bloque STRICT + reminder final — el outline de la referencia es HARD TEMPLATE, cero cambios de corte/fit/proporciones, pero el render sigue siendo tridimensional (volumen ghost-mannequin, profundidad de tela, form shading) DENTRO del outline; solo se mejora realismo/materiales/luz
 
 ### 2026-07-02/03 — v1.0.1 + v1.1.0
 - **v1.0.1:** `pollPOYOTask` muestra el `error_message` real de POYO en generaciones fallidas (antes solo "Generation failed" genérico). Diagnóstico de outage: POYO cayó ~6h con `"Server exception, please try again later"` en TODAS las generaciones (incluso prompts triviales) — no era bug de la app. Se recuperó solo; ambos modelos (`nano-banana-2` y `-edit`) verificados OK después

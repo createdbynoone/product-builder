@@ -20,6 +20,7 @@ export default function App() {
   const [enhFront, setEnhFront] = useState<string | null>(null)
   const [enhBack, setEnhBack] = useState<string | null>(null)
   const [enhNotes, setEnhNotes] = useState('')
+  const [enhStrict, setEnhStrict] = useState(true)
   const [ratio, setRatio] = useState<Ratio>('1:1')
   const [resolution, setResolution] = useState<Resolution>('2k')
   const [building, setBuilding] = useState(false)
@@ -185,7 +186,7 @@ export default function App() {
     setProgress([])
     setError('')
     try {
-      const res = await window.pb.fireEnhance({ frontPath: enhFront, backPath: enhBack, notes: enhNotes })
+      const res = await window.pb.fireEnhance({ frontPath: enhFront, backPath: enhBack, notes: enhNotes, strictSilhouette: enhStrict })
       if (res.outputs.length > 0) {
         const now = Date.now()
         const newRenders: Render[] = res.outputs.map((o) => ({
@@ -200,7 +201,7 @@ export default function App() {
     } finally {
       setBuilding(false)
     }
-  }, [building, enhFront, enhBack, enhNotes])
+  }, [building, enhFront, enhBack, enhNotes, enhStrict])
 
   const deleteRender = useCallback(async (r: Render) => {
     try {
@@ -335,6 +336,8 @@ export default function App() {
                 onBackRef={setEnhBack}
                 notes={enhNotes}
                 onNotes={setEnhNotes}
+                strictSilhouette={enhStrict}
+                onStrictSilhouette={setEnhStrict}
                 enhancing={building}
                 onEnhance={handleEnhance}
               />
